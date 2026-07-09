@@ -17,8 +17,16 @@ class AddressRepository {
     return await Address.findByIdAndUpdate(id, data, { new: true });
   }
 
+  async updateOwned(id, userId, data) {
+    return await Address.findOneAndUpdate({ _id: id, userId }, data, { new: true });
+  }
+
   async delete(id) {
     return await Address.deleteOne({ _id: id });
+  }
+
+  async deleteOwned(id, userId) {
+    return await Address.deleteOne({ _id: id, userId });
   }
 
   async findPrimaryByUserId(userId) {
@@ -27,7 +35,11 @@ class AddressRepository {
 
   async updatePrimary(userId, addressId) {
     await Address.updateMany({ userId }, { isPrimary: false });
-    return await Address.findByIdAndUpdate(addressId, { isPrimary: true }, { new: true });
+    return await Address.findOneAndUpdate({ _id: addressId, userId }, { isPrimary: true }, { new: true });
+  }
+
+  async updateMany(filter, data) {
+    return await Address.updateMany(filter, data);
   }
 
   async deleteByUserId(userId) {

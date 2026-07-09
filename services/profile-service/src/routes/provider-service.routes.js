@@ -1,11 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const { verifyToken } = require("../middlewares/auth.middleware");
+const { verifyToken, verifyRole } = require("../middlewares/auth.middleware");
+const { providerRateLimiter } = require("../middlewares/rate-limit.middleware");
 const providerServiceController = require("../controllers/provider-service.controller");
 
-router.post("/", verifyToken, providerServiceController.addService);
-router.get("/", verifyToken, providerServiceController.getServices);
-router.put("/:id", verifyToken, providerServiceController.updateService);
-router.delete("/:id", verifyToken, providerServiceController.deleteService);
+router.use(providerRateLimiter, verifyToken, verifyRole(["provider"]));
+router.post("/", providerServiceController.addService);
+router.get("/", providerServiceController.getServices);
+router.put("/:id", providerServiceController.updateService);
+router.delete("/:id", providerServiceController.deleteService);
 
 module.exports = router;

@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const providerServiceSchema = new mongoose.Schema(
   {
-    userId: {
+    providerId: {
       type: String,
       required: true,
       immutable: true,
@@ -30,7 +30,7 @@ const providerServiceSchema = new mongoose.Schema(
 
     priceType: {
       type: String,
-      enum: ["hourly", "fixed"],
+      enum: ["hourly", "fixed", "per_unit"],
       default: "fixed",
     },
 
@@ -46,13 +46,12 @@ const providerServiceSchema = new mongoose.Schema(
 );
 
 // Indexes
-providerServiceSchema.index({ userId: 1 });
 providerServiceSchema.index({ serviceId: 1 });
 providerServiceSchema.index({ isActive: 1 });
 
 // Prevent duplicate services for the same provider
 providerServiceSchema.index(
-  { userId: 1, serviceId: 1 },
+  { providerId: 1, serviceId: 1 },
   { unique: true }
 );
 

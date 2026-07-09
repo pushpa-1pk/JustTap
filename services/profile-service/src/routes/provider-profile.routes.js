@@ -1,13 +1,16 @@
 const express = require("express");
 const router = express.Router();
-const { verifyToken } = require("../middlewares/auth.middleware");
+const { verifyToken, verifyRole } = require("../middlewares/auth.middleware");
+const { providerRateLimiter } = require("../middlewares/rate-limit.middleware");
+const { profileImageUpload } = require("../middlewares/upload.middleware");
 const providerProfileController = require("../controllers/provider-profile.controller");
 
-router.post("/", verifyToken, providerProfileController.createProfile);
-router.get("/", verifyToken, providerProfileController.getProfile);
-router.put("/", verifyToken, providerProfileController.updateProfile);
-router.put("/location", verifyToken, providerProfileController.updateLocation);
-router.put("/online-status", verifyToken, providerProfileController.toggleOnlineStatus);
-router.post("/request-approval", verifyToken, providerProfileController.requestApproval);
+router.use(providerRateLimiter, verifyToken, verifyRole(["provider"]));
+router.post("/", profileImageUpload, providerProfileController.createProfile);
+router.get("/", providerProfileController.getProfile);
+router.put("/", profileImageUpload, providerProfileController.updateProfile);
+router.put("/location", providerProfileController.updateLocation);
+router.put("/online-status", providerProfileController.toggleOnlineStatus);
+router.post("/request-approval", providerProfileController.requestApproval);
 
 module.exports = router;

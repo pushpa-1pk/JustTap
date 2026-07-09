@@ -17,7 +17,7 @@ class BankDetailsController {
       throw new ApiError(404, "Provider profile not found");
     }
 
-    const result = await bankDetailsService.addBankDetails(providerProfile._id, value);
+    const result = await bankDetailsService.addBankDetails(providerProfile._id.toString(), value);
     res.status(201).json(new ApiResponse(201, result.message, result.data));
   });
 
@@ -27,7 +27,7 @@ class BankDetailsController {
       throw new ApiError(404, "Provider profile not found");
     }
 
-    const bankDetails = await bankDetailsService.getBankDetails(providerProfile._id);
+    const bankDetails = await bankDetailsService.getBankDetails(providerProfile._id.toString());
     res.status(200).json(new ApiResponse(200, "Bank details retrieved successfully", bankDetails));
   });
 
@@ -42,7 +42,7 @@ class BankDetailsController {
       throw new ApiError(404, "Provider profile not found");
     }
 
-    const result = await bankDetailsService.updateBankDetails(providerProfile._id, value);
+    const result = await bankDetailsService.updateBankDetails(providerProfile._id.toString(), value);
     res.status(200).json(new ApiResponse(200, result.message, result.data));
   });
 
@@ -52,7 +52,7 @@ class BankDetailsController {
       throw new ApiError(404, "Provider profile not found");
     }
 
-    const result = await bankDetailsService.deleteBankDetails(providerProfile._id);
+    const result = await bankDetailsService.deleteBankDetails(providerProfile._id.toString());
     res.status(200).json(new ApiResponse(200, result.message));
   });
 }

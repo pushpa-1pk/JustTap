@@ -25,6 +25,10 @@ class ProviderServiceRepository {
     return await ProviderService.findOne({ providerId, serviceId });
   }
 
+  async findOwnedById(id, providerId) {
+    return await ProviderService.findOne({ _id: id, providerId });
+  }
+
   async deleteByProviderId(providerId) {
     return await ProviderService.deleteMany({ providerId });
   }

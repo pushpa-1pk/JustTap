@@ -15,8 +15,19 @@ class ProviderProfileService {
 
       const profile = await providerProfileRepository.create({
         userId,
+        businessName: data.businessName,
+        experience: data.experience,
+        workingRadius: data.workingRadius,
+        currentLocation: {
+          type: "Point",
+          coordinates: [data.longitude, data.latitude],
+        },
+        workingHours: data.workingHours,
+        bio: data.bio || "",
+        profileImage: data.profileImage || "",
+        profileImageStorageProvider: data.profileImageStorageProvider || null,
+        profileImageStorageKey: data.profileImageStorageKey || null,
         verificationStatus: "pending",
-        ...data,
       });
 
       const completion = profile.calculateCompletion();
@@ -134,7 +145,8 @@ class ProviderProfileService {
       }
 
       // Check if all required documents are uploaded
-      const documents = await documentRepository.findByProviderId(profile._id);
+      const profileId = profile._id.toString();
+      const documents = await documentRepository.findLatestByProviderId(profileId);
       const hasAadhar = documents.some((d) => d.documentType === "aadhar");
       const hasPan = documents.some((d) => d.documentType === "pan");
       const hasProfilePhoto = documents.some((d) => d.documentType === "profile_photo");
@@ -144,13 +156,13 @@ class ProviderProfileService {
       }
 
       // Check if bank details are added
-      const bankDetails = await bankDetailsRepository.findByProviderId(profile._id);
+      const bankDetails = await bankDetailsRepository.findByProviderId(profileId);
       if (!bankDetails) {
         throw new ApiError(400, "Please add bank details for payment settlement");
       }
 
       // Create or update approval request
-      const existingRequest = await approvalRequestRepository.findByProviderId(profile._id);
+      const existingRequest = await approvalRequestRepository.findByProviderId(profileId);
       let approvalRequest;
 
       if (existingRequest && existingRequest.status === "rejected") {
@@ -163,7 +175,7 @@ class ProviderProfileService {
         });
       } else if (!existingRequest) {
         approvalRequest = await approvalRequestRepository.create({
-          providerId: profile._id,
+          providerId: profileId,
           requestType: "initial",
           status: "pending",
           requiredDocuments: {

@@ -1,0 +1,6 @@
+const OTP_PURPOSE = Object.freeze({
+  START_SERVICE: 'START_SERVICE',
+  COMPLETE_SERVICE: 'COMPLETE_SERVICE'
+});
+
+module.exports = { OTP_PURPOSE };

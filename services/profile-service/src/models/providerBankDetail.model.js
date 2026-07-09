@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const providerBankDetailSchema = new mongoose.Schema(
   {
-    userId: {
+    providerId: {
       type: String,
       required: true,
       unique: true,
@@ -62,10 +62,6 @@ const providerBankDetailSchema = new mongoose.Schema(
     versionKey: false,
   }
 );
-
-// Indexes
-providerBankDetailSchema.index({ userId: 1 }, { unique: true });
-providerBankDetailSchema.index({ verified: 1 });
 
 module.exports = mongoose.model(
   "ProviderBankDetail",

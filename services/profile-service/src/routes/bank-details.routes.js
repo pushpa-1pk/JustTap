@@ -1,11 +1,13 @@
 const express = require("express");
 const router = express.Router();
-const { verifyToken } = require("../middlewares/auth.middleware");
+const { verifyToken, verifyRole } = require("../middlewares/auth.middleware");
+const { providerRateLimiter } = require("../middlewares/rate-limit.middleware");
 const bankDetailsController = require("../controllers/bank-details.controller");
 
-router.post("/", verifyToken, bankDetailsController.addBankDetails);
-router.get("/", verifyToken, bankDetailsController.getBankDetails);
-router.put("/", verifyToken, bankDetailsController.updateBankDetails);
-router.delete("/", verifyToken, bankDetailsController.deleteBankDetails);
+router.use(providerRateLimiter, verifyToken, verifyRole(["provider"]));
+router.post("/", bankDetailsController.addBankDetails);
+router.get("/", bankDetailsController.getBankDetails);
+router.put("/", bankDetailsController.updateBankDetails);
+router.delete("/", bankDetailsController.deleteBankDetails);
 
 module.exports = router;

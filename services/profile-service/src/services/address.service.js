@@ -34,10 +34,10 @@ class AddressService {
     }
   }
 
-  async getAddress(addressId) {
+  async getAddress(addressId, userId) {
     try {
       const address = await addressRepository.findById(addressId);
-      if (!address) {
+      if (!address || address.userId !== userId) {
         throw new ApiError(404, "Address not found");
       }
       return address;
@@ -60,17 +60,20 @@ class AddressService {
     }
   }
 
-  async updateAddress(addressId, data) {
+  async updateAddress(addressId, userId, data) {
     try {
       const updateData = { ...data };
-      if (data.latitude && data.longitude) {
+      if (data.latitude !== undefined && data.longitude !== undefined) {
         updateData.location = {
           type: "Point",
           coordinates: [data.longitude, data.latitude],
         };
       }
 
-      const address = await addressRepository.update(addressId, updateData);
+      delete updateData.latitude;
+      delete updateData.longitude;
+
+      const address = await addressRepository.updateOwned(addressId, userId, updateData);
       if (!address) {
         throw new ApiError(404, "Address not found");
       }
@@ -89,6 +92,9 @@ class AddressService {
   async setPrimaryAddress(userId, addressId) {
     try {
       const address = await addressRepository.updatePrimary(userId, addressId);
+      if (!address) {
+        throw new ApiError(404, "Address not found");
+      }
       logger.info("PRIMARY_ADDRESS_SET", { userId, addressId });
       return address;
     } catch (error) {
@@ -97,9 +103,12 @@ class AddressService {
     }
   }
 
-  async deleteAddress(addressId) {
+  async deleteAddress(addressId, userId) {
     try {
-      await addressRepository.delete(addressId);
+      const result = await addressRepository.deleteOwned(addressId, userId);
+      if (!result.deletedCount) {
+        throw new ApiError(404, "Address not found");
+      }
       logger.info("ADDRESS_DELETED", { addressId });
       return { message: "Address deleted successfully" };
     } catch (error) {

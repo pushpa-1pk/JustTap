@@ -19,7 +19,6 @@ class ApprovalRequestRepository {
 
   async findPendingRequests(limit = 50, skip = 0) {
     return await ApprovalRequest.find({ status: "pending" })
-      .populate("providerId")
       .limit(limit)
       .skip(skip)
       .sort({ submittedAt: -1 });

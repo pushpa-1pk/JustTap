@@ -1,13 +1,15 @@
 const express = require("express");
 const router = express.Router();
 const { verifyToken } = require("../middlewares/auth.middleware");
+const { generalRateLimiter } = require("../middlewares/rate-limit.middleware");
 const addressController = require("../controllers/address.controller");
 
-router.post("/", verifyToken, addressController.createAddress);
-router.get("/", verifyToken, addressController.getUserAddresses);
-router.get("/:id", verifyToken, addressController.getAddress);
-router.put("/:id", verifyToken, addressController.updateAddress);
-router.put("/:id/set-primary", verifyToken, addressController.setPrimaryAddress);
-router.delete("/:id", verifyToken, addressController.deleteAddress);
+router.use(generalRateLimiter, verifyToken);
+router.post("/", addressController.createAddress);
+router.get("/", addressController.getUserAddresses);
+router.get("/:id", addressController.getAddress);
+router.put("/:id", addressController.updateAddress);
+router.put("/:id/set-primary", addressController.setPrimaryAddress);
+router.delete("/:id", addressController.deleteAddress);
 
 module.exports = router;

@@ -41,8 +41,8 @@ const addressSchema = new mongoose.Schema(
 
     label: {
       type: String,
-      enum: ["Home", "Office", "Other"],
-      default: "Home",
+      enum: ["home", "work", "other"],
+      default: "home",
       trim: true,
     },
 
@@ -90,7 +90,7 @@ const addressSchema = new mongoose.Schema(
       required: true,
     },
 
-    isDefault: {
+    isPrimary: {
       type: Boolean,
       default: false,
     },
@@ -102,8 +102,7 @@ const addressSchema = new mongoose.Schema(
 );
 
 // Indexes
-addressSchema.index({ userId: 1 });
-addressSchema.index({ userId: 1, isDefault: 1 });
+addressSchema.index({ userId: 1, isPrimary: 1 });
 addressSchema.index({ location: "2dsphere" });
 
 module.exports = mongoose.model("Address", addressSchema);

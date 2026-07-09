@@ -17,7 +17,7 @@ class ProviderServiceController {
       throw new ApiError(404, "Provider profile not found");
     }
 
-    const service = await providerServiceService.addService(providerProfile._id, value);
+    const service = await providerServiceService.addService(providerProfile._id.toString(), value);
     res.status(201).json(new ApiResponse(201, "Service added successfully", service));
   });
 
@@ -27,7 +27,7 @@ class ProviderServiceController {
       throw new ApiError(404, "Provider profile not found");
     }
 
-    const services = await providerServiceService.getProviderServices(providerProfile._id);
+    const services = await providerServiceService.getProviderServices(providerProfile._id.toString());
     res.status(200).json(new ApiResponse(200, "Services retrieved successfully", services));
   });
 
@@ -37,12 +37,29 @@ class ProviderServiceController {
       throw new ApiError(400, error.details[0].message);
     }
 
-    const service = await providerServiceService.updateService(req.params.id, value);
+    const providerProfile = await providerProfileRepository.findByUserId(req.user.id);
+    if (!providerProfile) {
+      throw new ApiError(404, "Provider profile not found");
+    }
+
+    const service = await providerServiceService.updateService(
+      req.params.id,
+      providerProfile._id.toString(),
+      value
+    );
     res.status(200).json(new ApiResponse(200, "Service updated successfully", service));
   });
 
   deleteService = asyncHandler(async (req, res) => {
-    const result = await providerServiceService.deleteService(req.params.id);
+    const providerProfile = await providerProfileRepository.findByUserId(req.user.id);
+    if (!providerProfile) {
+      throw new ApiError(404, "Provider profile not found");
+    }
+
+    const result = await providerServiceService.deleteService(
+      req.params.id,
+      providerProfile._id.toString()
+    );
     res.status(200).json(new ApiResponse(200, result.message));
   });
 }

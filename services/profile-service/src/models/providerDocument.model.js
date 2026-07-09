@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const providerDocumentSchema = new mongoose.Schema(
   {
-    userId: {
+    providerId: {
       type: String,
       required: true,
       immutable: true,
@@ -13,12 +13,7 @@ const providerDocumentSchema = new mongoose.Schema(
     documentType: {
       type: String,
       required: true,
-      enum: [
-        "AADHAAR",
-        "PAN",
-        "PROFILE_PHOTO",
-        "TRADE_LICENSE",
-      ],
+      enum: ["aadhar", "pan", "profile_photo", "trade_license", "gst", "shop_license"],
       immutable: true,
     },
 
@@ -27,16 +22,36 @@ const providerDocumentSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    storageProvider: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    storageKey: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    mimeType: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    originalName: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    sizeBytes: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
 
     status: {
       type: String,
-      enum: [
-        "PENDING",
-        "UNDER_REVIEW",
-        "APPROVED",
-        "REJECTED",
-      ],
-      default: "PENDING",
+      enum: ["pending", "under_review", "approved", "rejected"],
+      default: "pending",
       index: true,
     },
 
@@ -68,6 +83,12 @@ const providerDocumentSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    verifiedBy: {
+      type: String,
+      default: null,
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -76,14 +97,12 @@ const providerDocumentSchema = new mongoose.Schema(
 );
 
 // Indexes
-providerDocumentSchema.index({ userId: 1 });
 providerDocumentSchema.index({ documentType: 1 });
-providerDocumentSchema.index({ status: 1 });
 
 // Only one latest version of each document type per provider
 providerDocumentSchema.index(
   {
-    userId: 1,
+    providerId: 1,
     documentType: 1,
     isLatest: 1,
   },

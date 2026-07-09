@@ -1,0 +1,105 @@
+require("dotenv").config();
+
+const ALLOWED_NODE_ENVS = new Set(["development", "test", "production"]);
+
+const getString = (name, fallback = "") => {
+  const value = process.env[name];
+
+  if (value === undefined || value === null || value === "") {
+    return fallback;
+  }
+
+  return String(value).trim();
+};
+
+const getRequiredString = (name, fallback = "") => {
+  const value = getString(name, fallback);
+
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value;
+};
+
+const getNumber = (name, fallback) => {
+  const raw = getString(name, fallback);
+  const value = Number(raw);
+
+  if (!Number.isFinite(value)) {
+    throw new Error(`Invalid numeric environment variable: ${name}`);
+  }
+
+  return value;
+};
+
+const getBoolean = (name, fallback = false) => {
+  const raw = getString(name, fallback ? "true" : "false").toLowerCase();
+
+  if (["true", "1", "yes", "y"].includes(raw)) {
+    return true;
+  }
+
+  if (["false", "0", "no", "n"].includes(raw)) {
+    return false;
+  }
+
+  throw new Error(`Invalid boolean environment variable: ${name}`);
+};
+
+const getList = (name, fallback = "") => {
+  const value = getString(name, fallback);
+
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const NODE_ENV = getString("NODE_ENV", "development");
+
+if (!ALLOWED_NODE_ENVS.has(NODE_ENV)) {
+  throw new Error(
+    `Invalid NODE_ENV "${NODE_ENV}". Expected one of: ${[...ALLOWED_NODE_ENVS].join(", ")}`
+  );
+}
+
+const defaultEncryptionSecret = getString("JWT_ACCESS_SECRET", "unsafe-dev-secret");
+
+module.exports = {
+  NODE_ENV,
+  IS_PRODUCTION: NODE_ENV === "production",
+  PORT: getNumber("PORT", 4001),
+  MONGO_URI: getRequiredString("MONGO_URI", "mongodb://127.0.0.1:27017/justtap_profile"),
+  JWT_ACCESS_SECRET: getRequiredString("JWT_ACCESS_SECRET", "unsafe-dev-secret"),
+  JSON_BODY_LIMIT: getString("JSON_BODY_LIMIT", "100kb"),
+  ALLOWED_ORIGINS: getList("ALLOWED_ORIGINS"),
+  LOG_LEVEL: getString("LOG_LEVEL", "info"),
+  GENERAL_RATE_LIMIT_WINDOW_MS: getNumber("GENERAL_RATE_LIMIT_WINDOW_MS", 15 * 60 * 1000),
+  GENERAL_RATE_LIMIT_MAX: getNumber("GENERAL_RATE_LIMIT_MAX", 300),
+  PROVIDER_RATE_LIMIT_WINDOW_MS: getNumber("PROVIDER_RATE_LIMIT_WINDOW_MS", 15 * 60 * 1000),
+  PROVIDER_RATE_LIMIT_MAX: getNumber("PROVIDER_RATE_LIMIT_MAX", 120),
+  ADMIN_RATE_LIMIT_WINDOW_MS: getNumber("ADMIN_RATE_LIMIT_WINDOW_MS", 15 * 60 * 1000),
+  ADMIN_RATE_LIMIT_MAX: getNumber("ADMIN_RATE_LIMIT_MAX", 60),
+  AUTH_SERVICE_URL: getString("AUTH_SERVICE_URL", "http://127.0.0.1:4000"),
+  AUTH_USER_LOOKUP_REQUIRED: getBoolean("AUTH_USER_LOOKUP_REQUIRED", true),
+  AUTH_USER_LOOKUP_TIMEOUT_MS: getNumber("AUTH_USER_LOOKUP_TIMEOUT_MS", 3000),
+  PUBLIC_BASE_URL: getString("PUBLIC_BASE_URL", "http://127.0.0.1:4001"),
+  STORAGE_DRIVER: getString("STORAGE_DRIVER", "local").toLowerCase(),
+  UPLOADS_DIR_NAME: getString("UPLOADS_DIR_NAME", "uploads"),
+  CLOUDINARY_CLOUD_NAME: getString("CLOUDINARY_CLOUD_NAME"),
+  CLOUDINARY_API_KEY: getString("CLOUDINARY_API_KEY"),
+  CLOUDINARY_API_SECRET: getString("CLOUDINARY_API_SECRET"),
+  CLOUDINARY_FOLDER_PREFIX: getString("CLOUDINARY_FOLDER_PREFIX", "justtap"),
+  ALLOW_REMOTE_FILE_URL_UPLOADS: getBoolean("ALLOW_REMOTE_FILE_URL_UPLOADS", false),
+  PROFILE_IMAGE_MAX_FILE_SIZE_MB: getNumber("PROFILE_IMAGE_MAX_FILE_SIZE_MB", 5),
+  DOCUMENT_MAX_FILE_SIZE_MB: getNumber("DOCUMENT_MAX_FILE_SIZE_MB", 10),
+  BANK_ENCRYPTION_SECRET: getRequiredString(
+    "BANK_ENCRYPTION_SECRET",
+    defaultEncryptionSecret
+  ),
+};

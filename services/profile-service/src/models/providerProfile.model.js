@@ -66,28 +66,53 @@ const providerProfileSchema = new mongoose.Schema(
     },
 
     workingHours: {
-    start: {
+      start: {
         type: String,
         required: true,
         match: /^([01]\d|2[0-3]):([0-5]\d)$/
-    },
-    end: {
+      },
+      end: {
         type: String,
         required: true,
         match: /^([01]\d|2[0-3]):([0-5]\d)$/
-    }
+      },
     },
 
     verificationStatus: {
       type: String,
-      enum: [
-        "PENDING",
-        "UNDER_REVIEW",
-        "VERIFIED",
-        "REJECTED",
-      ],
-      default: "PENDING",
+      enum: ["pending", "under_review", "approved", "rejected"],
+      default: "pending",
       index: true,
+    },
+
+    bio: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: 500,
+    },
+
+    profileImage: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    profileImageStorageProvider: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    profileImageStorageKey: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
+    profileCompletion: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
     },
 
     rating: {
@@ -103,10 +128,26 @@ const providerProfileSchema = new mongoose.Schema(
       min: 0,
     },
 
-    isAvailable: {
+    isOnline: {
       type: Boolean,
       default: false,
       index: true,
+    },
+
+    approvalRequestedAt: {
+      type: Date,
+      default: null,
+    },
+
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+
+    approvedBy: {
+      type: String,
+      default: null,
+      trim: true,
     },
   },
   {
@@ -117,8 +158,22 @@ const providerProfileSchema = new mongoose.Schema(
 
 // Indexes
 providerProfileSchema.index({ currentLocation: "2dsphere" });
-providerProfileSchema.index({ verificationStatus: 1 });
-providerProfileSchema.index({ isAvailable: 1 });
+
+providerProfileSchema.methods.calculateCompletion = function calculateCompletion() {
+  const fields = [
+    Boolean(this.businessName),
+    Number.isFinite(this.experience),
+    Number.isFinite(this.workingRadius),
+    Boolean(this.currentLocation?.coordinates?.length === 2),
+    Boolean(this.workingHours?.start && this.workingHours?.end),
+    Boolean(this.bio),
+    Boolean(this.profileImage),
+  ];
+
+  return Math.round(
+    (fields.filter(Boolean).length / fields.length) * 100
+  );
+};
 
 module.exports = mongoose.model(
   "ProviderProfile",

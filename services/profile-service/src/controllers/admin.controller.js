@@ -6,7 +6,18 @@ const adminService = require("../services/admin.service");
 class AdminController {
   getPendingApprovals = asyncHandler(async (req, res) => {
     const { limit = 50, skip = 0 } = req.query;
-    const approvals = await adminService.getPendingApprovals(parseInt(limit), parseInt(skip));
+    const parsedLimit = Number.parseInt(limit, 10);
+    const parsedSkip = Number.parseInt(skip, 10);
+
+    if (!Number.isInteger(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+      throw new ApiError(400, "limit must be an integer between 1 and 100");
+    }
+
+    if (!Number.isInteger(parsedSkip) || parsedSkip < 0) {
+      throw new ApiError(400, "skip must be a non-negative integer");
+    }
+
+    const approvals = await adminService.getPendingApprovals(parsedLimit, parsedSkip);
     res.status(200).json(new ApiResponse(200, "Pending approvals retrieved successfully", approvals));
   });
 
