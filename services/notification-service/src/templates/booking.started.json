@@ -1,0 +1,6 @@
+{
+  "en": {
+    "title": "Service Started",
+    "body": "{{providerName}} has started your service."
+  }
+}

@@ -1,0 +1,25 @@
+module.exports = {
+  PRIORITIES: {
+    LOW: 'LOW',
+    NORMAL: 'NORMAL',
+    HIGH: 'HIGH',
+    CRITICAL: 'CRITICAL'
+  },
+  STATUSES: {
+    CREATED: 'CREATED',
+    QUEUED: 'QUEUED',
+    PROCESSING: 'PROCESSING',
+    SENT_TO_PROVIDER: 'SENT_TO_PROVIDER',
+    DELIVERED: 'DELIVERED',
+    FAILED: 'FAILED',
+    READ: 'READ',
+    CLICKED: 'CLICKED',
+    EXPIRED: 'EXPIRED'
+  },
+  CHANNELS: {
+    PUSH: 'PUSH',
+    EMAIL: 'EMAIL',
+    SMS: 'SMS',
+    IN_APP: 'IN_APP'
+  }
+};

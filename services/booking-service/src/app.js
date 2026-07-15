@@ -11,6 +11,7 @@ const providerQueryRoutes = require('./routes/provider/booking.routes');
 const adminBookingRoutes = require('./routes/admin/booking.routes');
 const cancellationRoutes = require('./routes/cancellation.routes');
 const rescheduleRoutes = require('./routes/reschedule.routes');
+const internalRoutes = require('./routes/internal.routes');
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/v1/bookings/provider', providerQueryRoutes);
 app.use('/api/v1/bookings', cancellationRoutes);
 app.use('/api/v1/bookings', rescheduleRoutes);
 app.use('/api/v1/admin/bookings', adminBookingRoutes);
+app.use('/api/v1/internal/bookings', internalRoutes);
 
 // Express 5 rejects the legacy "*" pattern, so keep the not-found handler pathless.
 app.use((req, res, next) => {

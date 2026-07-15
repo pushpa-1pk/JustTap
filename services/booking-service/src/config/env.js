@@ -68,6 +68,7 @@ module.exports = {
     authServiceUrl: process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4000',
     authUserLookupRequired: readBoolean('AUTH_USER_LOOKUP_REQUIRED', true),
     authUserLookupTimeoutMs: readNumber('AUTH_USER_LOOKUP_TIMEOUT_MS', 3000),
+    internalApiKey: process.env.INTERNAL_API_KEY || (process.env.NODE_ENV === 'production' ? '' : 'justtap-internal-dev-key'),
 
     profileServiceUrl: process.env.PROFILE_SERVICE_URL || 'http://127.0.0.1:4001',
     profileLookupRequired: readBoolean('PROFILE_LOOKUP_REQUIRED', true),
@@ -76,6 +77,8 @@ module.exports = {
     serviceManagementServiceUrl: process.env.SERVICE_MANAGEMENT_SERVICE_URL || 'http://127.0.0.1:4002',
     serviceLookupRequired: readBoolean('SERVICE_LOOKUP_REQUIRED', true),
     serviceLookupTimeoutMs: readNumber('SERVICE_LOOKUP_TIMEOUT_MS', 3000),
+    rabbitmqUri: process.env.RABBITMQ_URI || 'amqp://127.0.0.1:5672',
+    rabbitmqExchange: process.env.RABBITMQ_EXCHANGE || 'justtap.events',
 
     corsOrigin: process.env.CORS_ORIGIN,
 

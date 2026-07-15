@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { redisClient } = require('../config/redis');
+const notificationPublisher = require('../events/notification.publisher');
 const logger = require('../utils/logger');
 const OutboxPublisherJob = require('./outbox-publisher.job');
 const ProviderTimeoutJob = require('./provider-timeout.job');
@@ -35,6 +36,7 @@ async function handleGracefulShutdown(signal) {
     if (redisClient.isOpen) {
       await redisClient.quit();
     }
+    await notificationPublisher.disconnect();
     await mongoose.connection.close();
     logger.info({ message: 'Infrastructure connections closed. Shutdown sequence finished.' });
     process.exit(0);

@@ -14,6 +14,7 @@ const healthRoutes = require("./routes/health.routes");
 const adminRoutes = require("./routes/admin.routes");
 const providerRoutes = require("./routes/provider.routes");
 const catalogRoutes = require("./routes/catalog.routes");
+const internalRoutes = require("./routes/internal.routes");
 
 const app = express();
 
@@ -48,6 +49,7 @@ app.use("/api/v1/health", healthRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/provider", providerRoutes);
 app.use("/api/v1", catalogRoutes);
+app.use("/api/v1/internal", internalRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

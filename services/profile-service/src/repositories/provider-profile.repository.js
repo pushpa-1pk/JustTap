@@ -9,6 +9,10 @@ class ProviderProfileRepository {
     return await ProviderProfile.findOne({ userId });
   }
 
+  async findByUserIds(userIds) {
+    return await ProviderProfile.find({ userId: { $in: userIds } });
+  }
+
   async findById(id) {
     return await ProviderProfile.findById(id);
   }

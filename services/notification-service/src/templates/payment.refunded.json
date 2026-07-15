@@ -1,0 +1,6 @@
+{
+  "en": {
+    "title": "Refund Processed",
+    "body": "Your refund of Rs {{amount}} has been processed. Reference ID: {{refundId}}."
+  }
+}

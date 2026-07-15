@@ -1,0 +1,29 @@
+const PROVIDER_STATES = Object.freeze({
+  ONLINE: "ONLINE",
+  OFFLINE: "OFFLINE",
+  BUSY: "BUSY",
+  ON_BREAK: "ON_BREAK",
+  IN_SERVICE: "IN_SERVICE"
+});
+
+const REDIS_PREFIXES = Object.freeze({
+  PROVIDER_STATUS: "provider:status:",
+  PROVIDER_LOCATIONS: "provider_locations",
+  SEARCH_CACHE: "search:cache:",
+  REQUEST_LOCK: "booking:lock:"
+});
+
+const SORT_OPTIONS = Object.freeze({
+  NEAREST: "NEAREST",
+  LOWEST_PRICE: "LOWEST_PRICE",
+  HIGHEST_RATING: "HIGHEST_RATING",
+  FASTEST_ARRIVAL: "FASTEST_ARRIVAL",
+  MOST_EXPERIENCED: "MOST_EXPERIENCED",
+  MOST_POPULAR: "MOST_POPULAR"
+});
+
+module.exports = {
+  PROVIDER_STATES,
+  REDIS_PREFIXES,
+  SORT_OPTIONS
+};

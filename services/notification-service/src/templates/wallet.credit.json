@@ -1,0 +1,6 @@
+{
+  "en": {
+    "title": "Wallet Credited",
+    "body": "Rs {{amount}} has been added to your wallet. Your balance is {{balance}}."
+  }
+}

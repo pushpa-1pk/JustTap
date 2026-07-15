@@ -1,0 +1,6 @@
+{
+  "en": {
+    "title": "Payment Received 💳",
+    "body": "Transaction of ₹{{amount}} successful. Reference Reference ID: {{transactionId}}."
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "en": {
+    "title": "Booking Confirmed! 🎉",
+    "body": "{{providerName}} has accepted your request and is moving towards your location."
+  },
+  "hi": {
+    "title": "बुकिंग की पुष्टि हो गई! 🎉",
+    "body": "{{providerName}} ने आपका अनुरोध स्वीकार कर लिया है।"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "en": {
+    "title": "Security Alert",
+    "body": "{{action}} detected on your account at {{timestamp}}."
+  }
+}

@@ -1,4 +1,5 @@
 const { redisClient } = require('../config/redis');
+const notificationPublisher = require('../events/notification.publisher');
 const logger = require('../utils/logger');
 
 class EventQueue {
@@ -47,13 +48,25 @@ class EventQueue {
       emittedAt: new Date().toISOString()
     };
 
-    return this.redisClient.sendCommand([
+    const streamMessageId = await this.redisClient.sendCommand([
       'XADD',
       this.streamKey,
       '*',
       'data',
       JSON.stringify(data)
     ]);
+
+    try {
+      await notificationPublisher.publish(eventType, payload);
+    } catch (error) {
+      logger.error({
+        message: 'Failed to publish booking event to RabbitMQ notification exchange.',
+        eventType,
+        error: error.message
+      });
+    }
+
+    return streamMessageId;
   }
 }
 

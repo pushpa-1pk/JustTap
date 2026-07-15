@@ -1,0 +1,6 @@
+{
+  "en": {
+    "title": "Service Completed",
+    "body": "{{providerName}} has completed your service."
+  }
+}

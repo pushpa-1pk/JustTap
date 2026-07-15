@@ -1,0 +1,6 @@
+{
+  "en": {
+    "title": "Provider Arrived",
+    "body": "{{providerName}} has arrived at your location."
+  }
+}

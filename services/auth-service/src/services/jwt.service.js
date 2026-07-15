@@ -10,6 +10,8 @@ class JwtService {
       env.JWT_ACCESS_SECRET,
       {
         expiresIn: env.ACCESS_TOKEN_EXPIRES || "15m",
+        issuer: env.JWT_ISSUER,
+        audience: env.JWT_AUDIENCE,
       }
     );
   }
@@ -20,12 +22,17 @@ class JwtService {
       env.JWT_REFRESH_SECRET,
       {
         expiresIn: env.REFRESH_TOKEN_EXPIRES || "30d",
+        issuer: env.JWT_ISSUER,
+        audience: env.JWT_AUDIENCE,
       }
     );
   }
 
   verifyAccessToken(token) {
-    const payload = jwt.verify(token, env.JWT_ACCESS_SECRET);
+    const payload = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+      issuer: env.JWT_ISSUER,
+      audience: env.JWT_AUDIENCE,
+    });
 
     if (payload.type !== "access") {
       throw new Error("Invalid access token type.");
@@ -35,7 +42,10 @@ class JwtService {
   }
 
   verifyRefreshToken(token) {
-    const payload = jwt.verify(token, env.JWT_REFRESH_SECRET);
+    const payload = jwt.verify(token, env.JWT_REFRESH_SECRET, {
+      issuer: env.JWT_ISSUER,
+      audience: env.JWT_AUDIENCE,
+    });
 
     if (payload.type !== "refresh") {
       throw new Error("Invalid refresh token type.");

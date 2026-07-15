@@ -68,6 +68,8 @@ const env = {
   REDIS_URL: getRequiredString("REDIS_URL"),
   JWT_ACCESS_SECRET: getRequiredString("JWT_ACCESS_SECRET"),
   JWT_REFRESH_SECRET: getRequiredString("JWT_REFRESH_SECRET"),
+  JWT_ISSUER: getString("JWT_ISSUER", "justtap-auth"),
+  JWT_AUDIENCE: getString("JWT_AUDIENCE", "justtap-clients"),
   ACCESS_TOKEN_EXPIRES: getString("ACCESS_TOKEN_EXPIRES", "15m"),
   REFRESH_TOKEN_EXPIRES: getString("REFRESH_TOKEN_EXPIRES", "30d"),
   JSON_BODY_LIMIT: getString("JSON_BODY_LIMIT", "100kb"),
@@ -91,6 +93,14 @@ const env = {
     30
   ),
   SMS_PROVIDER: getString("SMS_PROVIDER", "mock"),
+  MSG91_AUTH_KEY: getString("MSG91_AUTH_KEY"),
+  MSG91_SENDER_ID: getString("MSG91_SENDER_ID"),
+  MSG91_ROUTE: getString("MSG91_ROUTE", "4"),
+  MSG91_COUNTRY: getString("MSG91_COUNTRY", "91"),
+  MSG91_DLT_TEMPLATE_ID: getString("MSG91_DLT_TEMPLATE_ID"),
+  TWILIO_ACCOUNT_SID: getString("TWILIO_ACCOUNT_SID"),
+  TWILIO_AUTH_TOKEN: getString("TWILIO_AUTH_TOKEN"),
+  TWILIO_FROM_NUMBER: getString("TWILIO_FROM_NUMBER"),
   LOG_LEVEL: getString("LOG_LEVEL", "info"),
 };
 
@@ -98,6 +108,28 @@ if (env.IS_PRODUCTION && env.SMS_PROVIDER === "mock") {
   throw new Error(
     'SMS_PROVIDER="mock" is not allowed when NODE_ENV=production.'
   );
+}
+
+if (env.SMS_PROVIDER === "twilio") {
+  ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM_NUMBER"].forEach(
+    (key) => {
+      if (!env[key]) {
+        throw new Error(
+          `Missing required environment variable for SMS_PROVIDER=twilio: ${key}`
+        );
+      }
+    }
+  );
+}
+
+if (env.SMS_PROVIDER === "msg91") {
+  ["MSG91_AUTH_KEY", "MSG91_SENDER_ID"].forEach((key) => {
+    if (!env[key]) {
+      throw new Error(
+        `Missing required environment variable for SMS_PROVIDER=msg91: ${key}`
+      );
+    }
+  });
 }
 
 module.exports = env;

@@ -83,6 +83,10 @@ module.exports = {
   AUTH_SERVICE_URL: getString("AUTH_SERVICE_URL", "http://127.0.0.1:4000"),
   AUTH_USER_LOOKUP_REQUIRED: getBoolean("AUTH_USER_LOOKUP_REQUIRED", true),
   AUTH_USER_LOOKUP_TIMEOUT_MS: getNumber("AUTH_USER_LOOKUP_TIMEOUT_MS", 3000),
+  INTERNAL_API_KEY: getRequiredString(
+    "INTERNAL_API_KEY",
+    NODE_ENV === "production" ? "" : "justtap-internal-dev-key"
+  ),
   PROFILE_SERVICE_URL: getString("PROFILE_SERVICE_URL", "http://127.0.0.1:4001"),
   PROFILE_LOOKUP_TIMEOUT_MS: getNumber("PROFILE_LOOKUP_TIMEOUT_MS", 3000),
   DEFAULT_ETA_MINUTES_PER_KM: getNumber("DEFAULT_ETA_MINUTES_PER_KM", 3),

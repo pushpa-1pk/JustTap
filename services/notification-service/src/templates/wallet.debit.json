@@ -1,0 +1,6 @@
+{
+  "en": {
+    "title": "Wallet Debited",
+    "body": "Rs {{amount}} has been deducted from your wallet. Your balance is {{balance}}."
+  }
+}

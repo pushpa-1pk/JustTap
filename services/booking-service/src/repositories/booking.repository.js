@@ -140,6 +140,37 @@ class BookingRepository extends BaseRepository {
       options
     );
   }
+
+  async assignProviderForMatching(
+    bookingId,
+    providerId,
+    providerSnapshot = {},
+    expectedStatuses = [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING_PROVIDER],
+    session = null
+  ) {
+    const options = { new: true, runValidators: true };
+    if (session) options.session = session;
+
+    return this.model.findOneAndUpdate(
+      {
+        _id: bookingId,
+        bookingStatus: { $in: expectedStatuses },
+        deletedAt: null
+      },
+      {
+        $set: {
+          providerId,
+          providerSnapshot: {
+            businessName: providerSnapshot.businessName || null,
+            phone: providerSnapshot.phone || null
+          },
+          bookingStatus: BOOKING_STATUS.PENDING_PROVIDER_RESPONSE,
+          requestedAt: new Date()
+        }
+      },
+      options
+    );
+  }
 }
 
 module.exports = BookingRepository;

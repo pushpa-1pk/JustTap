@@ -88,6 +88,10 @@ module.exports = {
   AUTH_SERVICE_URL: getString("AUTH_SERVICE_URL", "http://127.0.0.1:4000"),
   AUTH_USER_LOOKUP_REQUIRED: getBoolean("AUTH_USER_LOOKUP_REQUIRED", true),
   AUTH_USER_LOOKUP_TIMEOUT_MS: getNumber("AUTH_USER_LOOKUP_TIMEOUT_MS", 3000),
+  INTERNAL_API_KEY: getRequiredString(
+    "INTERNAL_API_KEY",
+    NODE_ENV === "production" ? "" : "justtap-internal-dev-key"
+  ),
   PUBLIC_BASE_URL: getString("PUBLIC_BASE_URL", "http://127.0.0.1:4001"),
   STORAGE_DRIVER: getString("STORAGE_DRIVER", "local").toLowerCase(),
   UPLOADS_DIR_NAME: getString("UPLOADS_DIR_NAME", "uploads"),
