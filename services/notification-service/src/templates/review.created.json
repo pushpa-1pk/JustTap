@@ -1,0 +1,10 @@
+{
+  "en": {
+    "title": "New review received",
+    "body": "You received a {{rating}}-star review{{commentSuffix}}."
+  },
+  "hi": {
+    "title": "नई रिव्यू मिली",
+    "body": "आपको {{rating}}-स्टार रिव्यू मिली है{{commentSuffix}}."
+  }
+}

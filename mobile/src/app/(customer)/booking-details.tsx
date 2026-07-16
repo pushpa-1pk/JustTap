@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator, TextInput, Modal } from 'react-native';
+import { StyleSheet, Text, View, Pressable, ScrollView, ActivityIndicator, TextInput, Modal, Alert } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { 
@@ -8,6 +8,12 @@ import {
   useCancelBookingMutation,
   useRescheduleBookingMutation
 } from '@/redux/api/bookingApi';
+import {
+  useCreateOrderMutation,
+  useVerifyPaymentMutation
+} from '@/redux/api/paymentApi';
+import MapViewComponent from '@/components/common/MapViewComponent';
+import useTracking from '@/hooks/useTracking';
 import SvgIcon from '@/components/common/SvgIcon';
 import * as Haptics from 'expo-haptics';
 
@@ -22,9 +28,17 @@ export default function BookingDetailsScreen() {
   const { data: timelineRes, isLoading: isTimelineLoading } = useGetCustomerBookingTimelineQuery(bookingId, { skip: !bookingId });
   const [cancelBooking, { isLoading: isCancelling }] = useCancelBookingMutation();
   const [rescheduleBooking, { isLoading: isRescheduling }] = useRescheduleBookingMutation();
+  
+  // Payment mutations
+  const [createOrder, { isLoading: isCreatingOrder }] = useCreateOrderMutation();
+  const [verifyPayment, { isLoading: isVerifyingPayment }] = useVerifyPaymentMutation();
 
   const booking = bookingRes?.data;
   const timeline = timelineRes?.data || [];
+
+  // Live Socket Tracking Coordinate subscription
+  const isActive = booking ? ['PROVIDER_ACCEPTED', 'ON_THE_WAY', 'ARRIVED', 'SERVICE_STARTED'].includes(booking.status) : false;
+  const { coordinates: liveCoords } = useTracking(booking && booking.status === 'ON_THE_WAY' ? booking._id : null);
 
   // Modal Control States
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
@@ -32,8 +46,13 @@ export default function BookingDetailsScreen() {
   const [cancelExplain, setCancelExplain] = useState('');
   
   const [rescheduleModalVisible, setRescheduleModalVisible] = useState(false);
-  const [newDate, setNewDate] = useState('2026-07-12');
-  const [newTime, setNewTime] = useState('14:00');
+  const [newDate, setNewDate] = useState('2026-07-20');
+  const [newTime, setNewTime] = useState('10:00');
+
+  // Payment Checkout States
+  const [payModalVisible, setPayModalVisible] = useState(false);
+  const [gatewayOrderId, setGatewayOrderId] = useState('');
+  const [payAmount, setPayAmount] = useState(0);
 
   if (isLoading) {
     return (
@@ -50,6 +69,11 @@ export default function BookingDetailsScreen() {
       </View>
     );
   }
+
+  // Resolve Map Centering coordinates
+  const customerCoords = booking.customerAddressSnapshot?.location?.coordinates || [72.8777, 19.0760];
+  const mapLat = liveCoords?.latitude || customerCoords[1];
+  const mapLng = liveCoords?.longitude || customerCoords[0];
 
   const handleCancelSubmit = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -88,6 +112,40 @@ export default function BookingDetailsScreen() {
     }
   };
 
+  const handleTriggerPayment = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    try {
+      const res = await createOrder({ bookingId }).unwrap();
+      if (res.success && res.data) {
+        setGatewayOrderId(res.data.gatewayOrderId);
+        setPayAmount(res.data.amountPaise / 100);
+        setPayModalVisible(true);
+      }
+    } catch (err: any) {
+      console.error('Create order failed:', err);
+      Alert.alert('Payment Error', err.data?.message || 'Failed to initialize payment gateway.');
+    }
+  };
+
+  const handleCompleteMockPayment = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    try {
+      await verifyPayment({
+        gatewayOrderId,
+        gatewayPaymentId: 'pay_mock_' + Math.random().toString(36).substring(7),
+        gatewaySignature: 'sig_mock_' + Math.random().toString(36).substring(7),
+      }).unwrap();
+
+      setPayModalVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Payment Successful', 'Transaction has been completed.');
+      refetchBooking();
+    } catch (err: any) {
+      console.error('Payment verification failed:', err);
+      Alert.alert('Verification Error', 'Failed to confirm transaction.');
+    }
+  };
+
   const getStatusLabel = (status: string) => {
     return status.replace(/_/g, ' ');
   };
@@ -110,6 +168,18 @@ export default function BookingDetailsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         
+        {/* Live Map Tracking Header (Only if provider has accepted and job is active) */}
+        {isActive && (
+          <View style={[styles.mapHeaderContainer, { borderColor: colors.border }]}>
+            <MapViewComponent
+              latitude={mapLat}
+              longitude={mapLng}
+              title={booking.status === 'ON_THE_WAY' ? 'Provider Location (Live)' : 'Service Destination'}
+              description={booking.status === 'ON_THE_WAY' ? 'Provider is en route to your address.' : 'Your registered address.'}
+            />
+          </View>
+        )}
+
         {/* Booking Card summary */}
         <View style={[styles.detailsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[typography.caption, { color: colors.textSecondary }]}>BOOKING ID: {booking._id}</Text>
@@ -204,7 +274,7 @@ export default function BookingDetailsScreen() {
           </View>
           <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <View style={styles.billRow}>
-            <Text style={[typography.bodyLarge, { color: colors.text, fontWeight: '700' }]}>Total Paid</Text>
+            <Text style={[typography.bodyLarge, { color: colors.text, fontWeight: '700' }]}>Total Amount</Text>
             <Text style={[typography.h2, { color: colors.secondary, fontWeight: '800' }]}>₹{booking.priceSnapshot?.finalAmount}</Text>
           </View>
         </View>
@@ -224,6 +294,47 @@ export default function BookingDetailsScreen() {
               onPress={() => setCancelModalVisible(true)}
             >
               <Text style={[typography.buttonText, { color: '#FFFFFF' }]}>Cancel Booking</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Pay Now Action (If completed/service_completed and payment pending) */}
+        {['SERVICE_COMPLETED', 'COMPLETED'].includes(booking.status) && booking.paymentStatus !== 'PAID' && (
+          <View style={styles.actionGroup}>
+            <Pressable 
+              style={[styles.actionBtn, { backgroundColor: colors.primary }]}
+              onPress={handleTriggerPayment}
+              disabled={isCreatingOrder}
+            >
+              {isCreatingOrder ? (
+                <ActivityIndicator size="small" color={colors.onPrimary} />
+              ) : (
+                <Text style={[typography.buttonText, { color: colors.onPrimary }]}>Pay Now (₹{booking.priceSnapshot?.finalAmount})</Text>
+              )}
+            </Pressable>
+          </View>
+        )}
+
+        {/* Leave Review Action (If completed and payment paid) */}
+        {booking.status === 'COMPLETED' && booking.paymentStatus === 'PAID' && (
+          <View style={styles.actionGroup}>
+            <Pressable 
+              style={[styles.actionBtn, { backgroundColor: colors.secondary }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push({
+                  pathname: '/(customer)/write-review',
+                  params: {
+                    bookingId: booking._id,
+                    providerId: booking.providerId || '',
+                    serviceId: booking.serviceId || '',
+                    serviceName: booking.serviceSnapshot?.name || 'Home Service',
+                    businessName: booking.providerSnapshot?.businessName || 'Service Provider',
+                  }
+                });
+              }}
+            >
+              <Text style={[typography.buttonText, { color: '#FFFFFF' }]}>Leave Service Feedback</Text>
             </Pressable>
           </View>
         )}
@@ -289,7 +400,7 @@ export default function BookingDetailsScreen() {
             <Text style={[styles.modalLabel, typography.bodySmall, { color: colors.textSecondary }]}>NEW DATE (YYYY-MM-DD)</Text>
             <TextInput
               style={[styles.textInputSingle, typography.bodyLarge, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
-              placeholder="2026-07-12"
+              placeholder="2026-07-20"
               value={newDate}
               onChangeText={setNewDate}
             />
@@ -297,7 +408,7 @@ export default function BookingDetailsScreen() {
             <Text style={[styles.modalLabel, typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.md }]}>NEW TIME (HH:MM)</Text>
             <TextInput
               style={[styles.textInputSingle, typography.bodyLarge, { backgroundColor: colors.surfaceVariant, color: colors.text }]}
-              placeholder="14:00"
+              placeholder="10:00"
               value={newTime}
               onChangeText={setNewTime}
             />
@@ -323,6 +434,57 @@ export default function BookingDetailsScreen() {
         </View>
       </Modal>
 
+      {/* 3. RAZORPAY CHECKOUT MODAL */}
+      <Modal
+        visible={payModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPayModalVisible(false)}
+      >
+        <View style={styles.modalBg}>
+          <View style={[styles.modalCard, { backgroundColor: colors.surface, padding: 24 }]}>
+            {/* Razorpay header logo simulation */}
+            <View style={styles.payHeader}>
+              <Text style={[typography.h2, { color: colors.primary, fontWeight: '800' }]}>razorpay</Text>
+              <View style={[styles.payBadge, { backgroundColor: colors.secondary + '20' }]}>
+                <Text style={[typography.caption, { color: colors.secondary, fontWeight: '700' }]}>SECURE</Text>
+              </View>
+            </View>
+
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>ORDER REFERENCE ID</Text>
+            <Text style={[typography.bodyLarge, { color: colors.text, fontWeight: '700', marginTop: 2 }]} numberOfLines={1}>
+              {gatewayOrderId}
+            </Text>
+
+            <View style={styles.paymentSummary}>
+              <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>Amount to Pay</Text>
+              <Text style={[typography.h1, { color: colors.text, fontWeight: '800' }]}>₹{payAmount}</Text>
+            </View>
+
+            <Pressable 
+              style={[styles.payBtnSubmit, { backgroundColor: colors.secondary }]}
+              onPress={handleCompleteMockPayment}
+              disabled={isVerifyingPayment}
+            >
+              {isVerifyingPayment ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={[typography.buttonText, { color: '#FFFFFF' }]}>Simulate Payment Success</Text>
+              )}
+            </Pressable>
+
+            <Pressable 
+              style={[styles.payBtnDismiss, { marginTop: spacing.md }]} 
+              onPress={() => setPayModalVisible(false)}
+            >
+              <Text style={[typography.buttonText, { color: colors.textSecondary }]}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -335,6 +497,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  mapHeaderContainer: {
+    height: 180,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    overflow: 'hidden',
+    marginBottom: 20,
   },
   scroll: {
     padding: 24,
@@ -400,7 +569,7 @@ const styles = StyleSheet.create({
   actionGroup: {
     flexDirection: 'row',
     gap: 12,
-    marginVertical: 24,
+    marginVertical: 12,
   },
   actionBtn: {
     flex: 1,
@@ -449,6 +618,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  payHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  payBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  paymentSummary: {
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  payBtnSubmit: {
+    height: 52,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  payBtnDismiss: {
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
   },

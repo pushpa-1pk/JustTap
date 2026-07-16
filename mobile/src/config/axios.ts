@@ -56,6 +56,33 @@ export const getAbsoluteUrl = (url: string): string => {
     return `${ENV.BOOKING_SERVICE_URL}/api/v1${url}`;
   }
   
+  // Notification Service
+  if (
+    url.startsWith('/notifications') ||
+    url.startsWith('/preferences') ||
+    url.startsWith('/devices/register')
+  ) {
+    return `${ENV.NOTIFICATION_SERVICE_URL}/api/v1${url}`;
+  }
+
+  // Payment Service
+  if (
+    url.startsWith('/payments') ||
+    url.startsWith('/wallet') ||
+    url.startsWith('/withdrawals')
+  ) {
+    return `${ENV.PAYMENT_SERVICE_URL}/api/v1${url}`;
+  }
+
+  // Review Service
+  if (
+    url.startsWith('/reviews') ||
+    url.startsWith('/public/provider') ||
+    url.startsWith('/public/summary')
+  ) {
+    return `${ENV.REVIEW_SERVICE_URL}/api/v1${url}`;
+  }
+
   // Matching Service (Discovery / Sockets)
   if (
     url.startsWith('/search/providers-matching') || // matching-service specific search

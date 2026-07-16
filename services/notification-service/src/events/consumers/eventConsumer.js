@@ -15,7 +15,8 @@ async function startEventConsumer(container) {
     'wallet.*',
     'tracking.*',
     'auth.*',
-    'matching.*'
+    'matching.*',
+    'review.*'
   ];
 
   for (const bindingRoute of dynamicTopicBindings) {

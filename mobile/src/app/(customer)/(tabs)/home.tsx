@@ -76,7 +76,10 @@ export default function CustomerHomeScreen() {
         {/* Notification Bell Icon */}
         <Pressable 
           style={[styles.notificationBtn, { borderColor: colors.border }]}
-          onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/(customer)/notifications');
+          }}
         >
           <View style={[styles.bellDot, { backgroundColor: colors.secondary }]} />
           {/* Simple Bell Svg drawing */}

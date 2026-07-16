@@ -22,6 +22,7 @@ const updatePreferencesSchema = Joi.object({
     booking: Joi.boolean(),
     payment: Joi.boolean(),
     wallet: Joi.boolean(),
+    review: Joi.boolean(),
     marketing: Joi.boolean(),
     support: Joi.boolean(),
     promotions: Joi.boolean(),

@@ -7,6 +7,7 @@ const TrackingArrivedHandler = require('../../events/handlers/trackingArrived.ha
 const BookingStartedHandler = require('../../events/handlers/bookingStarted.handler');
 const BookingCompletedHandler = require('../../events/handlers/bookingCompleted.handler');
 const AuthSecurityHandler = require('../../events/handlers/authSecurity.handler');
+const ReviewCreatedHandler = require('../../events/handlers/reviewCreated.handler');
 const { STATUSES } = require('../../constants/notification.constants');
 
 class NotificationOrchestrator {
@@ -28,6 +29,7 @@ class NotificationOrchestrator {
     this.registerHandler(new BookingStartedHandler());
     this.registerHandler(new BookingCompletedHandler());
     this.registerHandler(new AuthSecurityHandler());
+    this.registerHandler(new ReviewCreatedHandler());
   }
 
   registerHandler(handler) {

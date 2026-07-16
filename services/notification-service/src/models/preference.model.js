@@ -6,6 +6,7 @@ const PreferenceSchema = new mongoose.Schema({
     booking: { type: Boolean, default: true },
     payment: { type: Boolean, default: true },
     wallet: { type: Boolean, default: true },
+    review: { type: Boolean, default: true },
     marketing: { type: Boolean, default: false },
     support: { type: Boolean, default: true },
     promotions: { type: Boolean, default: false },

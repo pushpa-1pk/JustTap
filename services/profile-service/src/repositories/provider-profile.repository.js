@@ -76,6 +76,17 @@ class ProviderProfileRepository {
   async exists(userId) {
     return await ProviderProfile.exists({ userId });
   }
+
+  async updateReviewMetrics(userId, metrics) {
+    return await ProviderProfile.findOneAndUpdate(
+      { userId },
+      {
+        rating: Number(metrics.averageRating || 0),
+        totalJobs: Number.isFinite(Number(metrics.totalJobs)) ? Number(metrics.totalJobs) : 0,
+      },
+      { new: true }
+    );
+  }
 }
 
 module.exports = new ProviderProfileRepository();

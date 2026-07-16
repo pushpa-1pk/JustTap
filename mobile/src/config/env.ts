@@ -21,6 +21,10 @@ export const ENV = {
   SERVICE_MANAGEMENT_URL: resolveUrl(process.env.EXPO_PUBLIC_SERVICE_MANAGEMENT_URL) || 'http://localhost:4002',
   BOOKING_SERVICE_URL: resolveUrl(process.env.EXPO_PUBLIC_BOOKING_SERVICE_URL) || 'http://localhost:3001',
   MATCHING_SERVICE_URL: resolveUrl(process.env.EXPO_PUBLIC_MATCHING_SERVICE_URL) || 'http://localhost:5003',
+  NOTIFICATION_SERVICE_URL: resolveUrl(process.env.EXPO_PUBLIC_NOTIFICATION_SERVICE_URL) || 'http://localhost:4005',
+  PAYMENT_SERVICE_URL: resolveUrl(process.env.EXPO_PUBLIC_PAYMENT_SERVICE_URL) || 'http://localhost:5005',
+  REVIEW_SERVICE_URL: resolveUrl(process.env.EXPO_PUBLIC_REVIEW_SERVICE_URL) || 'http://localhost:5006',
+  TRACKING_SERVICE_URL: resolveUrl(process.env.EXPO_PUBLIC_TRACKING_SERVICE_URL) || 'http://localhost:5004',
   
   // Timeout settings
   REQUEST_TIMEOUT_MS: 15000,

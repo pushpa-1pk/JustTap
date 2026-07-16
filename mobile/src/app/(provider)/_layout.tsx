@@ -25,6 +25,8 @@ export default function ProviderStackLayout() {
       <Stack.Screen name="job-details" options={{ title: 'Job Dispatch Status' }} />
       <Stack.Screen name="kyc-upload" options={{ title: 'KYC Document Verification' }} />
       <Stack.Screen name="bank-setup" options={{ title: 'Configure Payout Bank' }} />
+      <Stack.Screen name="wallet" options={{ title: 'My Wallet & Payouts' }} />
+      <Stack.Screen name="notifications" options={{ title: 'Alert Inbox' }} />
     </Stack>
   );
 }

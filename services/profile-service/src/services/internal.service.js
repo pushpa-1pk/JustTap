@@ -81,6 +81,23 @@ class InternalService {
       },
     }));
   }
+
+  async updateProviderReviewMetrics(userId, payload) {
+    const profile = await providerProfileRepository.updateReviewMetrics(userId, {
+      averageRating: payload.averageRating,
+      totalJobs: payload.totalReviews,
+    });
+
+    if (!profile) {
+      throw new ApiError(404, "Provider profile not found");
+    }
+
+    return {
+      userId: profile.userId,
+      rating: profile.rating ?? 0,
+      totalJobs: profile.totalJobs ?? 0,
+    };
+  }
 }
 
 module.exports = new InternalService();

@@ -12,6 +12,11 @@ router.get(
   allowInternalOrAuthenticated,
   internalController.getProviderByUserId
 );
+router.patch(
+  "/providers/:userId/rating",
+  requireInternalApiKey,
+  internalController.updateProviderReviewMetrics
+);
 router.post(
   "/providers/service-area",
   requireInternalApiKey,

@@ -38,6 +38,17 @@ class InternalController {
         })
       );
   });
+
+  updateProviderReviewMetrics = asyncHandler(async (req, res) => {
+    const result = await internalService.updateProviderReviewMetrics(
+      req.params.userId,
+      req.body || {}
+    );
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, "Provider review metrics updated successfully", result));
+  });
 }
 
 module.exports = new InternalController();

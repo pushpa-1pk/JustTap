@@ -77,3 +77,13 @@ test('arrival, service, and security handlers use appropriate channels', async (
     ['PUSH', 'EMAIL']
   );
 });
+
+test('review created handler maps provider review alerts', async () => {
+  const ReviewCreatedHandler = require('../src/events/handlers/reviewCreated.handler');
+  const handler = new ReviewCreatedHandler();
+  const meta = handler.extractMeta({ reviewId: 'r1', bookingId: 'b1', rating: 5, comment: 'Great work' });
+
+  assert.equal(handler.eventType, 'review.created');
+  assert.equal(meta.templateName, 'review.created');
+  assert.deepEqual(meta.channels, ['PUSH', 'IN_APP']);
+});
