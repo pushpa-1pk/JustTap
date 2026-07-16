@@ -47,5 +47,8 @@ example
 .claude/
 .vscode/
 
-AGENTS.md
-CLAUDE.md
+
+# Claude AI files
+mobile/.claude/
+mobile/CLAUDE.md
+mobile/AGENTS.md
