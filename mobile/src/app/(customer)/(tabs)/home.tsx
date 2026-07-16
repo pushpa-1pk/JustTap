@@ -41,7 +41,7 @@ export default function CustomerHomeScreen() {
   const handleCategoryPress = (categoryId: string, categoryName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push({
-      pathname: '/(customer)/search',
+      pathname: '/(customer)/(tabs)/search',
       params: { categoryId, categoryName },
     });
   };
@@ -49,7 +49,7 @@ export default function CustomerHomeScreen() {
   const handleServicePress = (serviceId: string, serviceName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push({
-      pathname: '/(customer)/search',
+      pathname: '/(customer)/(tabs)/search',
       params: { serviceId, serviceName },
     });
   };
@@ -78,7 +78,7 @@ export default function CustomerHomeScreen() {
           style={[styles.notificationBtn, { borderColor: colors.border }]}
           onPress={() => {
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push('/(customer)/notifications');
+            router.push('../notifications');
           }}
         >
           <View style={[styles.bellDot, { backgroundColor: colors.secondary }]} />
@@ -96,7 +96,7 @@ export default function CustomerHomeScreen() {
         {/* 2. Interactive Search Trigger Bar */}
         <Pressable 
           style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          onPress={() => router.push('/(customer)/search')}
+          onPress={() => router.push('/(customer)/(tabs)/search')}
         >
           <SvgIcon name="briefcase" color={colors.textSecondary} size={18} />
           <Text style={[typography.bodyMedium, { color: colors.textSecondary, marginLeft: spacing.sm }]}>
@@ -159,7 +159,7 @@ export default function CustomerHomeScreen() {
           <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>Popular Services</Text>
 
           {isServicesLoading ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} gap={16}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
               {[1, 2, 3].map(k => (
                 <View key={k} style={[styles.popularCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
                   <Shimmer width={120} height={80} borderRadius={12} />

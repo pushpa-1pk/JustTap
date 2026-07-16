@@ -206,14 +206,14 @@ export default function ProviderJobsScreen() {
                   <View style={[styles.btnRow, { borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md }]}>
                     <Pressable
                       style={[styles.declineBtn, { borderColor: colors.border }]}
-                      onPress={() => handleDeclineRequest(item._id || item.id)}
+                      onPress={() => handleDeclineRequest(item._id)}
                     >
                       <Text style={[typography.buttonText, { color: colors.text, fontSize: 13 }]}>Decline</Text>
                     </Pressable>
 
                     <Pressable
                       style={[styles.acceptBtn, { backgroundColor: colors.secondary }]}
-                      onPress={() => handleAcceptRequest(item._id || item.id)}
+                      onPress={() => handleAcceptRequest(item._id)}
                       disabled={isAccepting}
                     >
                       {isAccepting ? (
@@ -228,7 +228,7 @@ export default function ProviderJobsScreen() {
                 {activeTab === 'active' && (
                   <Pressable
                     style={[styles.linkBtn, { borderTopColor: colors.border, marginTop: spacing.md, paddingTop: spacing.md }]}
-                    onPress={() => handleActiveJobPress(item._id || item.id)}
+                    onPress={() => handleActiveJobPress(item._id)}
                   >
                     <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>
                       Open Stepper & OTP Verification

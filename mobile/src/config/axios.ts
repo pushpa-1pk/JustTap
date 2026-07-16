@@ -1,6 +1,7 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { ENV } from './env';
 import { secureStore } from '../utils/secureStore';
+import { getAuthPlatform } from '../utils/auth';
 
 // Helper to resolve microservice endpoint based on path prefixes
 export const getAbsoluteUrl = (url: string): string => {
@@ -185,7 +186,8 @@ apiClient.interceptors.response.use(
         const refreshResponse = await axios.post(refreshUrl, {
           refreshToken,
           deviceId: 'mobile-app-client',
-          platform: 'MOBILE',
+          deviceName: 'JustTap Mobile',
+          platform: getAuthPlatform(),
         });
 
         const { accessToken: newAccessToken, refreshToken: newRefreshToken } = refreshResponse.data.data;

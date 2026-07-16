@@ -10,6 +10,8 @@ export const Colors = {
     background: '#F8FAFC',       // Soft slate background
     surface: '#FFFFFF',          // Card/Sheet background
     surfaceVariant: '#F1F5F9',   // Alternating fields
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#F1F5F9',
     border: '#E2E8F0',           // Neutral dividers
     text: '#0F172A',             // Dark Slate (Primary Text)
     textSecondary: '#64748B',    // Muted Slate (Subtitle/Secondary Text)
@@ -37,6 +39,8 @@ export const Colors = {
     background: '#090D16',       // Deep navy/black background
     surface: '#151D30',          // Elevated dark container background
     surfaceVariant: '#1E2942',   // Selection/fields background
+    backgroundElement: '#151D30',
+    backgroundSelected: '#1E2942',
     border: '#2A364F',           // Dark borders
     text: '#F8FAFC',             // Off-white primary text
     textSecondary: '#94A3B8',    // Slate text secondary
@@ -57,23 +61,30 @@ export const Colors = {
   },
 } as const;
 
-export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+type StringThemeKeys<T> = {
+  [K in keyof T]: T[K] extends string ? K : never;
+}[keyof T];
+
+export type ThemeColor = StringThemeKeys<typeof Colors.light> & StringThemeKeys<typeof Colors.dark>;
 
 export const Fonts = Platform.select({
   ios: {
     sans: 'System',
     sansBold: 'System',
     sansMedium: 'System',
+    mono: 'Courier',
   },
   android: {
     sans: 'sans-serif',
     sansBold: 'sans-serif-condensed',
     sansMedium: 'sans-serif-medium',
+    mono: 'monospace',
   },
   default: {
     sans: 'normal',
     sansBold: 'normal',
     sansMedium: 'normal',
+    mono: 'monospace',
   },
 });
 
@@ -129,6 +140,12 @@ export const Typography = {
 };
 
 export const Spacing = {
+  half: 2,
+  one: 4,
+  two: 8,
+  three: 12,
+  four: 16,
+  five: 20,
   xs: 4,
   sm: 8,
   md: 12,

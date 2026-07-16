@@ -26,10 +26,10 @@ export default function ProviderProfileScreen() {
   };
 
   const menuItems = [
-    { title: 'My Wallet & Payouts', icon: 'briefcase', path: '/(provider)/wallet' as const, desc: 'View earnings balance and request cash-outs' },
-    { title: 'Configure Payout Bank', icon: 'briefcase', path: '/(provider)/bank-setup' as const, desc: 'Manage your primary bank transfer details' },
-    { title: 'KYC Verification', icon: 'briefcase', path: '/(provider)/kyc-upload' as const, desc: 'Manage identity verification documents' },
-    { title: 'Alert Inbox', icon: 'briefcase', path: '/(provider)/notifications' as const, desc: 'Review your in-app booking notifications' },
+    { title: 'My Wallet & Payouts', icon: 'briefcase', path: '../wallet' as const, desc: 'View earnings balance and request cash-outs' },
+    { title: 'Configure Payout Bank', icon: 'briefcase', path: '../bank-setup' as const, desc: 'Manage your primary bank transfer details' },
+    { title: 'KYC Verification', icon: 'briefcase', path: '../kyc-upload' as const, desc: 'Manage identity verification documents' },
+    { title: 'Alert Inbox', icon: 'briefcase', path: '../notifications' as const, desc: 'Review your in-app booking notifications' },
   ];
 
   return (

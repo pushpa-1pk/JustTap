@@ -30,7 +30,32 @@ export default function CustomerSearchScreen() {
 
   // Matching Service API Mutation
   const [searchProviders, { data: searchResults, isLoading, isError }] = useSearchProvidersMatchingMutation();
-  const providers = searchResults?.data?.providers || [];
+  const rawProviders = searchResults?.data?.providers || [];
+  const providers = rawProviders
+    .filter((provider) => {
+      const matchesKeyword = debouncedKeyword
+        ? provider.businessName.toLowerCase().includes(debouncedKeyword.toLowerCase())
+        : true;
+      const matchesExperience = minExperience !== undefined
+        ? provider.experience >= minExperience
+        : true;
+      const matchesPrice = maxPrice !== undefined
+        ? provider.price <= maxPrice
+        : true;
+
+      return matchesKeyword && matchesExperience && matchesPrice;
+    })
+    .sort((left, right) => {
+      if (selectedSort === 'price') {
+        return left.price - right.price;
+      }
+
+      if (selectedSort === 'rating') {
+        return (right.rating || 0) - (left.rating || 0);
+      }
+
+      return left.distance - right.distance;
+    });
 
   // Triggers API search when inputs/filters change
   useEffect(() => {
@@ -39,13 +64,8 @@ export default function CustomerSearchScreen() {
         await searchProviders({
           latitude: 19.0760, // Default coordinates for Mumbai Center
           longitude: 72.8777,
-          categoryId: params.categoryId || undefined,
           serviceId: params.serviceId || undefined,
-          keyword: debouncedKeyword || undefined,
-          maxPrice,
-          minExperience,
-          sortBy: selectedSort,
-          sortOrder: selectedSort === 'price' ? 'asc' : 'desc',
+          radius: 10,
           limit: 20,
         }).unwrap();
       } catch (err) {
@@ -54,12 +74,12 @@ export default function CustomerSearchScreen() {
     };
 
     performSearch();
-  }, [debouncedKeyword, params.categoryId, params.serviceId, selectedSort, minExperience, maxPrice, searchProviders]);
+  }, [params.serviceId, searchProviders]);
 
   const handleBookNow = (provider: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     router.push({
-      pathname: '/(customer)/bookings', // We will route to a book request view in future stack, but go to bookings for redirection check
+      pathname: '/bookings',
       params: { 
         providerId: provider.userId,
         providerServiceId: provider.providerServiceId,

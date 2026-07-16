@@ -46,12 +46,12 @@ export default function BookingSuccessScreen() {
 
   const handleTrackBooking = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.replace('/(customer)/bookings');
+    router.replace('/(customer)/(tabs)/bookings');
   };
 
   const handleGoHome = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.replace('/(customer)/home');
+    router.replace('/(customer)/(tabs)/home');
   };
 
   return (

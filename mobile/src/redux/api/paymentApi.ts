@@ -2,13 +2,10 @@ import { baseApi } from './baseApi';
 
 export interface WalletSummary {
   balancePaise: number;
+  pendingBalancePaise: number;
   withdrawnPaise: number;
+  lifetimeEarningsPaise: number;
   currency: string;
-  bankDetailsSnapshot?: {
-    accountNumber: string;
-    bankName: string;
-    accountHolderName: string;
-  };
 }
 
 export interface PayoutRequest {
@@ -20,6 +17,13 @@ export interface PayoutRequest {
   };
 }
 
+type RawWallet = {
+  availableBalancePaise?: number;
+  pendingBalancePaise?: number;
+  withdrawnBalancePaise?: number;
+  lifetimeEarningsPaise?: number;
+};
+
 export const paymentApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     createOrder: builder.mutation<{ success: boolean; data: { gatewayOrderId: string; amountPaise: number; currency: string } }, { bookingId: string }>({
@@ -28,8 +32,16 @@ export const paymentApi = baseApi.injectEndpoints({
         method: 'POST',
         data: body,
       }),
+      transformResponse: (response: { success: boolean; data: { gatewayOrderId: string; amount: number; currency: string } }) => ({
+        ...response,
+        data: {
+          gatewayOrderId: response.data.gatewayOrderId,
+          amountPaise: response.data.amount,
+          currency: response.data.currency,
+        },
+      }),
     }),
-    verifyPayment: builder.mutation<{ success: boolean; message: string; data: any }, { gatewayOrderId: string; gatewayPaymentId: string; gatewaySignature: string }>({
+    verifyPayment: builder.mutation<{ success: boolean; message: string; data: unknown }, { gatewayOrderId: string; gatewayPaymentId: string; gatewaySignature: string }>({
       query: (body) => ({
         url: '/payments/verify',
         method: 'POST',
@@ -42,9 +54,19 @@ export const paymentApi = baseApi.injectEndpoints({
         url: '/payments/wallet',
         method: 'GET',
       }),
+      transformResponse: (response: { success: boolean; data: RawWallet }) => ({
+        ...response,
+        data: {
+          balancePaise: response.data.availableBalancePaise ?? 0,
+          pendingBalancePaise: response.data.pendingBalancePaise ?? 0,
+          withdrawnPaise: response.data.withdrawnBalancePaise ?? 0,
+          lifetimeEarningsPaise: response.data.lifetimeEarningsPaise ?? 0,
+          currency: 'INR',
+        },
+      }),
       providesTags: ['Profile'],
     }),
-    requestWithdrawal: builder.mutation<{ success: boolean; message: string; data: any }, PayoutRequest>({
+    requestWithdrawal: builder.mutation<{ success: boolean; message: string; data: unknown }, PayoutRequest>({
       query: (body) => ({
         url: '/payments/withdrawals',
         method: 'POST',

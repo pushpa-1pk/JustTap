@@ -44,7 +44,7 @@ export default function ProviderDashboardScreen() {
     try {
       // Toggle online status in both profile (DB) and matching (Redis presence)
       await updateOnlineStatus({ isOnline: value }).unwrap();
-      await updateMatchingStatus({ isOnline: value }).unwrap();
+      await updateMatchingStatus({ status: value ? 'ONLINE' : 'OFFLINE' }).unwrap();
     } catch (err) {
       console.error('Failed to toggle online status:', err);
     }
@@ -164,7 +164,7 @@ export default function ProviderDashboardScreen() {
           ) : (
             <FlatList
               data={activeJobs}
-              keyExtractor={(item) => item._id || item.id}
+              keyExtractor={(item) => item._id}
               contentContainerStyle={{ paddingHorizontal: 24, gap: 12 }}
               scrollEnabled={false}
               renderItem={({ item }) => {
@@ -173,7 +173,7 @@ export default function ProviderDashboardScreen() {
                 return (
                   <Pressable
                     style={[styles.jobCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
-                    onPress={() => handleJobPress(item._id || item.id)}
+                    onPress={() => handleJobPress(item._id)}
                   >
                     <View style={styles.jobRow}>
                       <View style={{ flex: 1 }}>

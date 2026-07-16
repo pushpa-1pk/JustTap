@@ -23,16 +23,16 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     // Segment routing lifecycle checks
     if (!isAuthenticated) {
       // Redirect to login if trying to access any protected area
-      if (!inAuthGroup && segments.length > 0 && segments[0] !== 'index') {
+      if (!inAuthGroup && segments.length > 0) {
         router.replace('/(auth)/login');
       }
     } else if (user) {
       // Redirect authenticated users away from login/onboarding screens
       if (inAuthGroup) {
         if (user.role === 'CUSTOMER') {
-          router.replace('/(customer)/home');
+          router.replace('/(customer)/(tabs)/home');
         } else if (user.role === 'PROVIDER') {
-          router.replace('/(provider)/dashboard');
+          router.replace('/(provider)/(tabs)/dashboard');
         } else if (user.role === 'ADMIN') {
           router.replace('/(admin)/dashboard');
         }
@@ -40,9 +40,9 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
       
       // Enforce role-based access boundaries
       if (user.role === 'CUSTOMER' && (inProviderGroup || inAdminGroup)) {
-        router.replace('/(customer)/home');
+        router.replace('/(customer)/(tabs)/home');
       } else if (user.role === 'PROVIDER' && (inCustomerGroup || inAdminGroup)) {
-        router.replace('/(provider)/dashboard');
+        router.replace('/(provider)/(tabs)/dashboard');
       } else if (user.role === 'ADMIN' && (inCustomerGroup || inProviderGroup)) {
         router.replace('/(admin)/dashboard');
       }

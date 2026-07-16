@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, Pressable, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -124,7 +124,7 @@ export default function BookServiceScreen() {
           pincode: activeAddress.pincode,
           location: {
             type: 'Point' as const,
-            coordinates: [activeAddress.longitude, activeAddress.latitude],
+            coordinates: [activeAddress.longitude, activeAddress.latitude] as [number, number],
           }
         },
         additionalNotes: data.additionalNotes || undefined

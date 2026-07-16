@@ -4,7 +4,7 @@ interface User {
   id: string;
   phone: string;
   role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
-  accountStatus: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
+  accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
   isProfileComplete?: boolean;
 }
 

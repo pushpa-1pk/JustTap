@@ -18,7 +18,7 @@ export interface MatchingProviderResult {
   phone: string;
   location: {
     type: 'Point';
-    coordinates: [number, number]; // [longitude, latitude]
+    coordinates: [number, number];
   };
   distance: number;
   rating: number;
@@ -27,28 +27,22 @@ export interface MatchingProviderResult {
   providerServiceId: string;
 }
 
+type MatchingStatus = 'ONLINE' | 'OFFLINE' | 'BUSY' | 'ON_BREAK' | 'IN_SERVICE';
+
 export const matchingApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    // Customer search for nearby providers (Matching Service optimization pipeline)
     searchProvidersMatching: builder.mutation<{
       success: boolean;
       data: {
         providers: MatchingProviderResult[];
-        count: number;
+        total?: number;
+        count?: number;
       };
     }, {
       latitude: number;
       longitude: number;
-      categoryId?: string;
+      radius?: number;
       serviceId?: string;
-      keyword?: string;
-      minPrice?: number;
-      maxPrice?: number;
-      minExperience?: number;
-      minRating?: number;
-      sortBy?: string;
-      sortOrder?: 'asc' | 'desc';
-      page?: number;
       limit?: number;
     }>({
       query: (body) => ({
@@ -56,9 +50,18 @@ export const matchingApi = baseApi.injectEndpoints({
         method: 'POST',
         data: body,
       }),
+      transformResponse: (response: {
+        success: boolean;
+        data: { providers: MatchingProviderResult[]; total?: number };
+      }) => ({
+        ...response,
+        data: {
+          providers: response.data.providers || [],
+          total: response.data.total ?? response.data.providers?.length ?? 0,
+          count: response.data.total ?? response.data.providers?.length ?? 0,
+        },
+      }),
     }),
-
-    // Customer dispatches booking request invitations to nearby matching providers
     dispatchBookingRequest: builder.mutation<{ success: boolean; data: { invitationId: string; booking: Booking } }, {
       serviceId: string;
       providerServiceId: string;
@@ -75,8 +78,6 @@ export const matchingApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Bookings'],
     }),
-
-    // Provider accepts a dispatched booking request invitation
     acceptBookingRequest: builder.mutation<{ success: boolean; message: string; data: Booking }, { invitationId: string }>({
       query: ({ invitationId }) => ({
         url: `/booking-requests/${invitationId}/accept`,
@@ -84,17 +85,13 @@ export const matchingApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Bookings'],
     }),
-
-    // Provider rejects a dispatched booking request invitation
     rejectBookingRequest: builder.mutation<{ success: boolean; message: string }, { invitationId: string }>({
       query: ({ invitationId }) => ({
         url: `/booking-requests/${invitationId}/reject`,
         method: 'POST',
       }),
     }),
-
-    // Provider updates dynamic presence status (online/offline state) in matching index
-    updateMatchingStatus: builder.mutation<{ success: boolean; data: { isOnline: boolean } }, { isOnline: boolean }>({
+    updateMatchingStatus: builder.mutation<{ success: boolean; data: { status: MatchingStatus; activeBookingId?: string | null } }, { status: MatchingStatus; activeBookingId?: string | null }>({
       query: (body) => ({
         url: '/provider/status',
         method: 'PUT',
@@ -102,9 +99,7 @@ export const matchingApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: ['Profile'],
     }),
-
-    // Provider updates dynamic real-time location coordinates in matching index
-    updateMatchingLocation: builder.mutation<{ success: boolean; message: string }, { latitude: number; longitude: number }>({
+    updateMatchingLocation: builder.mutation<{ success: boolean; message: string }, { latitude: number; longitude: number; heading?: number; speed?: number; accuracy?: number }>({
       query: (body) => ({
         url: '/provider/location',
         method: 'PUT',

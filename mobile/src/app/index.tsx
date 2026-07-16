@@ -8,6 +8,7 @@ import { setCredentials, logout } from '../redux/slices/authSlice';
 import { useTheme } from '../hooks/useTheme';
 import axios from 'axios';
 import { getAbsoluteUrl } from '../config/axios';
+import { normalizeProfileCompletion, normalizeUserRole } from '../utils/auth';
 
 import SplashLoader from '../components/common/SplashLoader';
 
@@ -22,8 +23,6 @@ export default function InitialRouteIndex() {
     const restoreSession = async () => {
       try {
         const token = await secureStore.getAccessToken();
-        const role = await secureStore.getRole();
-        
         if (!token) {
           dispatch(logout());
           return;
@@ -42,9 +41,9 @@ export default function InitialRouteIndex() {
             user: {
               id: fetchedUser.id || fetchedUser._id,
               phone: fetchedUser.phone,
-              role: fetchedUser.role,
+              role: normalizeUserRole(fetchedUser.role),
               accountStatus: fetchedUser.accountStatus,
-              isProfileComplete: fetchedUser.isProfileComplete || false
+              isProfileComplete: normalizeProfileCompletion(fetchedUser),
             },
             accessToken: token
           }));
@@ -67,9 +66,9 @@ export default function InitialRouteIndex() {
     if (isAuthenticated && user) {
       // Role-based redirection guards
       if (user.role === 'CUSTOMER') {
-        router.replace('/(customer)/home');
+        router.replace('/(customer)/(tabs)/home');
       } else if (user.role === 'PROVIDER') {
-        router.replace('/(provider)/dashboard');
+        router.replace('/(provider)/(tabs)/dashboard');
       } else if (user.role === 'ADMIN') {
         router.replace('/(admin)/dashboard');
       } else {

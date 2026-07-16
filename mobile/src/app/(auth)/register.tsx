@@ -16,16 +16,16 @@ import * as Haptics from 'expo-haptics';
 const customerSchema = z.object({
   fullName: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Please enter a valid email address'),
-  gender: z.enum(['Male', 'Female', 'Other'], { errorMap: () => ({ message: 'Please select a gender' }) }),
+  gender: z.enum(['Male', 'Female', 'Other']),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'DOB must be in YYYY-MM-DD format'),
-  language: z.string().default('English'),
+  language: z.string(),
 });
 
 // 2. Zod Validation Schema for Provider Profile
 const providerSchema = z.object({
   businessName: z.string().min(3, 'Business name must be at least 3 characters'),
-  experience: z.number({ coerce: true }).min(0, 'Experience must be a positive number'),
-  workingRadius: z.number({ coerce: true }).min(1, 'Working radius must be at least 1 km'),
+  experience: z.coerce.number().min(0, 'Experience must be a positive number'),
+  workingRadius: z.coerce.number().min(1, 'Working radius must be at least 1 km'),
   bio: z.string().min(10, 'Bio must be at least 10 characters long'),
   workingHoursStart: z.string().regex(/^\d{2}:\d{2}$/, 'Start time must be in HH:MM format'),
   workingHoursEnd: z.string().regex(/^\d{2}:\d{2}$/, 'End time must be in HH:MM format'),
@@ -48,13 +48,13 @@ export default function RegisterScreen() {
   const [createProviderProfile, { isLoading: isCreatingProvider }] = useCreateProviderProfileMutation();
 
   // 1. Customer Form Setup
-  const customerForm = useForm<CustomerFormData>({
+  const customerForm = useForm<z.input<typeof customerSchema>, any, CustomerFormData>({
     resolver: zodResolver(customerSchema),
     defaultValues: { fullName: '', email: '', gender: 'Male', dateOfBirth: '1998-01-01', language: 'English' },
   });
 
   // 2. Provider Form Setup
-  const providerForm = useForm<ProviderFormData>({
+  const providerForm = useForm<z.input<typeof providerSchema>, any, ProviderFormData>({
     resolver: zodResolver(providerSchema),
     defaultValues: { businessName: '', experience: 2, workingRadius: 10, bio: '', workingHoursStart: '09:00', workingHoursEnd: '18:00' },
   });
@@ -81,7 +81,7 @@ export default function RegisterScreen() {
         await secureStore.saveRole('CUSTOMER');
         dispatch(updateUser({ role: 'CUSTOMER', isProfileComplete: true }));
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace('/(customer)/home');
+        router.replace('/(customer)/(tabs)/home');
       }
     } catch (err) {
       console.error('Customer profile creation failed:', err);
@@ -110,7 +110,7 @@ export default function RegisterScreen() {
         await secureStore.saveRole('PROVIDER');
         dispatch(updateUser({ role: 'PROVIDER', isProfileComplete: true }));
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace('/(provider)/dashboard');
+        router.replace('/(provider)/(tabs)/dashboard');
       }
     } catch (err) {
       console.error('Provider profile creation failed:', err);

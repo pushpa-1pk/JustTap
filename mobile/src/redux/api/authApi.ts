@@ -1,8 +1,40 @@
 import { baseApi } from './baseApi';
+import { AppUserRole, AuthPlatform, normalizeProfileCompletion, normalizeUserRole } from '@/utils/auth';
+
+type RawAuthUser = {
+  id?: string;
+  _id?: string;
+  phone: string;
+  role: string;
+  accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
+  isProfileComplete?: boolean;
+  profileCompleted?: boolean;
+};
+
+type RawAuthResponse = {
+  success: boolean;
+  message: string;
+  data: {
+    accessToken: string;
+    refreshToken: string;
+    refreshTokenExpiresAt?: string;
+    expiresIn?: number;
+    isNewUser?: boolean;
+    user: RawAuthUser;
+  };
+};
+
+const normalizeUser = (user: RawAuthUser) => ({
+  id: user.id || user._id || '',
+  phone: user.phone,
+  role: normalizeUserRole(user.role),
+  accountStatus: user.accountStatus,
+  isProfileComplete: normalizeProfileCompletion(user),
+});
 
 export const authApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    sendOtp: builder.mutation<{ success: boolean; message: string; data: { alreadyExists: boolean } }, { phone: string }>({
+    sendOtp: builder.mutation<{ success: boolean; message: string; data: { alreadyExists?: boolean; isExistingUser?: boolean } }, { phone: string }>({
       query: (body) => ({
         url: '/auth/send-otp',
         method: 'POST',
@@ -11,14 +43,18 @@ export const authApi = baseApi.injectEndpoints({
     }),
     verifyOtp: builder.mutation<{
       success: boolean;
+      message: string;
       data: {
         accessToken: string;
         refreshToken: string;
+        refreshTokenExpiresAt?: string;
+        expiresIn?: number;
+        isNewUser?: boolean;
         user: {
           id: string;
           phone: string;
-          role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
-          accountStatus: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
+          role: AppUserRole;
+          accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
           isProfileComplete: boolean;
         };
       };
@@ -28,27 +64,40 @@ export const authApi = baseApi.injectEndpoints({
       role: 'customer' | 'provider' | 'admin';
       deviceId: string;
       deviceName: string;
-      platform: 'MOBILE';
+      platform: AuthPlatform;
+      appVersion?: string;
     }>({
       query: (body) => ({
         url: '/auth/verify-otp',
         method: 'POST',
         data: body,
       }),
+      transformResponse: (response: RawAuthResponse) => ({
+        ...response,
+        data: {
+          ...response.data,
+          user: normalizeUser(response.data.user),
+        },
+      }),
     }),
     getMe: builder.query<{
       success: boolean;
+      message: string;
       data: {
         id: string;
         phone: string;
-        role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
-        accountStatus: 'PENDING_VERIFICATION' | 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
+        role: AppUserRole;
+        accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
         isProfileComplete: boolean;
       };
     }, void>({
       query: () => ({
         url: '/auth/me',
         method: 'GET',
+      }),
+      transformResponse: (response: { success: boolean; message: string; data: RawAuthUser }) => ({
+        ...response,
+        data: normalizeUser(response.data),
       }),
       providesTags: ['User'],
     }),
@@ -58,10 +107,9 @@ export const authApi = baseApi.injectEndpoints({
         method: 'POST',
         data: body,
       }),
-      async onQueryStarted(_, { dispatch, queryFulfilled }) {
+      async onQueryStarted(_, { queryFulfilled }) {
         try {
           await queryFulfilled;
-          // Custom cleanups can be triggered here if needed
         } catch (error) {
           console.error('API logout error:', error);
         }

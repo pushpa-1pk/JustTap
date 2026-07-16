@@ -9,6 +9,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useVerifyOtpMutation, useSendOtpMutation } from '@/redux/api/authApi';
 import { setCredentials } from '@/redux/slices/authSlice';
 import { secureStore } from '@/utils/secureStore';
+import { getAuthPlatform } from '@/utils/auth';
 import * as Haptics from 'expo-haptics';
 
 // Validation Schema for 6-digit OTP
@@ -67,10 +68,11 @@ export default function OtpScreen() {
       const response = await verifyOtp({
         phone,
         otp: data.otp,
-        role: 'customer', 
+        role: 'customer',
         deviceId: 'mobile-app-client',
         deviceName: Platform.OS === 'ios' ? 'iOS Device' : 'Android Device',
-        platform: 'MOBILE',
+        platform: getAuthPlatform(),
+        appVersion: '1.0.0',
       }).unwrap();
 
       if (response.success && response.data) {
@@ -97,15 +99,15 @@ export default function OtpScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
         // 3. Role-based redirect or Profile completion redirect
-        const isNewUser = (response as any).isNewUser || !authUser.isProfileComplete;
+        const isNewUser = response.data.isNewUser || !authUser.isProfileComplete;
         if (isNewUser) {
           router.replace('/(auth)/register');
         } else {
           // Direct redirect based on user role
           if (authUser.role === 'CUSTOMER') {
-            router.replace('/(customer)/home');
+            router.replace('/(customer)/(tabs)/home');
           } else if (authUser.role === 'PROVIDER') {
-            router.replace('/(provider)/dashboard');
+            router.replace('/(provider)/(tabs)/dashboard');
           } else if (authUser.role === 'ADMIN') {
             router.replace('/(admin)/dashboard');
           } else {
