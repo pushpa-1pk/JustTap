@@ -27,6 +27,13 @@ export default function ProviderStackLayout() {
       <Stack.Screen name="bank-setup" options={{ title: 'Configure Payout Bank' }} />
       <Stack.Screen name="wallet" options={{ title: 'My Wallet & Payouts' }} />
       <Stack.Screen name="notifications" options={{ title: 'Alert Inbox' }} />
+      <Stack.Screen name="edit-profile" options={{ title: 'Edit Provider Profile' }} />
+      <Stack.Screen name="business-info" options={{ title: 'Business Details' }} />
+      <Stack.Screen name="service-areas" options={{ title: 'Manage Service Areas' }} />
+      <Stack.Screen name="working-hours" options={{ title: 'Set Working Hours' }} />
+      <Stack.Screen name="performance" options={{ title: 'My Performance' }} />
+      <Stack.Screen name="reviews" options={{ title: 'Customer Reviews & Ratings' }} />
+      <Stack.Screen name="settings" options={{ title: 'Provider Settings' }} />
     </Stack>
   );
 }

@@ -1,81 +1,21 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, View, Text } from 'react-native';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withRepeat, 
-  withTiming, 
-  withSequence,
-  Easing
-} from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 import { useTheme } from '@/hooks/useTheme';
-
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export default function SplashLoader() {
   const { colors, typography, spacing, border } = useTheme();
 
-  // Animation values
-  const logoScale = useSharedValue(0.8);
-  const logoOpacity = useSharedValue(0);
-  const glowOpacity = useSharedValue(0.4);
-  const spinRotation = useSharedValue(0);
-
-  useEffect(() => {
-    // Logo scale and fade-in
-    logoScale.value = withTiming(1, { duration: 1000, easing: Easing.out(Easing.back(1.5)) });
-    logoOpacity.value = withTiming(1, { duration: 800 });
-
-    // Logo pulsing glow animation
-    glowOpacity.value = withRepeat(
-      withSequence(
-        withTiming(0.8, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
-        withTiming(0.4, { duration: 1200, easing: Easing.inOut(Easing.ease) })
-      ),
-      -1,
-      true
-    );
-
-    // Spinner rotation
-    spinRotation.value = withRepeat(
-      withTiming(360, { duration: 1500, easing: Easing.linear }),
-      -1,
-      false
-    );
-  }, []);
-
-  // Animated styles
-  const animatedLogoStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: logoScale.value }],
-      opacity: logoOpacity.value,
-    };
-  });
-
-  const animatedGlowStyle = useAnimatedStyle(() => {
-    return {
-      opacity: glowOpacity.value,
-    };
-  });
-
-  const animatedSpinnerStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ rotate: `${spinRotation.value}deg` }],
-    };
-  });
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Background Radial Glow */}
-      <Animated.View style={[
+      <View style={[
         styles.glowRing, 
         { backgroundColor: colors.primary }, 
-        animatedGlowStyle
       ]} />
       
       {/* Central Logo Panel */}
-      <Animated.View style={[styles.logoContainer, animatedLogoStyle]}>
+      <View style={styles.logoContainer}>
         {/* Rounded Gold Card Container */}
         <View style={[
           styles.logoCard, 
@@ -96,11 +36,11 @@ export default function SplashLoader() {
         ]}>
           Instantly Reliable
         </Text>
-      </Animated.View>
+      </View>
 
       {/* Progress Spinner */}
       <View style={styles.spinnerContainer}>
-        <Animated.View style={[styles.spinner, animatedSpinnerStyle]}>
+        <View style={styles.spinner}>
           <Svg width={40} height={40} viewBox="0 0 40 40">
             <Circle 
               cx={20} 
@@ -110,7 +50,7 @@ export default function SplashLoader() {
               strokeWidth={3} 
               fill="transparent" 
             />
-            <AnimatedCircle 
+            <Circle 
               cx={20} 
               cy={20} 
               r={16} 
@@ -122,7 +62,7 @@ export default function SplashLoader() {
               fill="transparent" 
             />
           </Svg>
-        </Animated.View>
+        </View>
       </View>
     </View>
   );

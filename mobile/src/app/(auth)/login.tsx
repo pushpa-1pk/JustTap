@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, Pressable, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import Animated, { FadeIn, FadeOut, SlideInRight, SlideOutLeft } from 'react-native-reanimated';
+
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -85,7 +85,12 @@ export default function LoginScreen() {
         });
       }
     } catch (err: any) {
-      console.error('Send OTP Failed:', err);
+      console.warn('Send OTP error:', err);
+      const { Alert } = require('react-native');
+      Alert.alert(
+        'Login Failed',
+        err.data?.message || 'Failed to send OTP. Please check your internet connection or mobile number and try again.'
+      );
     }
   };
 
@@ -102,11 +107,7 @@ export default function LoginScreen() {
           
           {/* STEP 1: LANGUAGE SELECTION */}
           {step === 'language' && (
-            <Animated.View 
-              entering={FadeIn.duration(400)} 
-              exiting={FadeOut.duration(300)}
-              style={styles.stepContainer}
-            >
+            <View style={styles.stepContainer}>
               <Text style={[typography.h2, { color: colors.text, textAlign: 'center', marginBottom: spacing.sm }]}>
                 Choose Language / भाषा चुनें
               </Text>
@@ -161,16 +162,12 @@ export default function LoginScreen() {
               >
                 <Text style={[typography.buttonText, { color: colors.onPrimary }]}>Continue</Text>
               </Pressable>
-            </Animated.View>
+            </View>
           )}
 
           {/* STEP 2: ONBOARDING CAROUSEL */}
           {step === 'onboarding' && (
-            <Animated.View 
-              entering={SlideInRight.duration(400)}
-              exiting={SlideOutLeft.duration(300)}
-              style={styles.stepContainer}
-            >
+            <View style={styles.stepContainer}>
               <View style={styles.carouselContainer}>
                 {/* Brand Logo Header */}
                 <Text style={[typography.h1, { color: colors.text, textAlign: 'center', marginBottom: spacing.xxl }]}>
@@ -178,14 +175,14 @@ export default function LoginScreen() {
                 </Text>
 
                 {/* Animated Slide Content */}
-                <Animated.View key={onboardingIndex} entering={FadeIn} style={styles.slideContent}>
+                <View key={onboardingIndex} style={styles.slideContent}>
                   <Text style={[typography.h2, { color: colors.text, textAlign: 'center', marginBottom: spacing.md }]}>
                     {onboardingSlides[onboardingIndex].title}
                   </Text>
                   <Text style={[typography.bodyLarge, { color: colors.textSecondary, textAlign: 'center', lineHeight: 24 }]}>
                     {onboardingSlides[onboardingIndex].desc}
                   </Text>
-                </Animated.View>
+                </View>
               </View>
 
               {/* Slide Indicators */}
@@ -212,15 +209,12 @@ export default function LoginScreen() {
                   {onboardingIndex === onboardingSlides.length - 1 ? 'Get Started' : 'Next'}
                 </Text>
               </Pressable>
-            </Animated.View>
+            </View>
           )}
 
           {/* STEP 3: PHONE LOGIN FORM */}
           {step === 'login' && (
-            <Animated.View 
-              entering={SlideInRight.duration(400)}
-              style={styles.stepContainer}
-            >
+            <View style={styles.stepContainer}>
               <Text style={[typography.h1, { color: colors.text, marginBottom: spacing.sm }]}>
                 Welcome to JustTap
               </Text>
@@ -296,7 +290,7 @@ export default function LoginScreen() {
               <Text style={[typography.caption, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xl }]}>
                 By continuing, you agree to our Terms of Service and Privacy Policy.
               </Text>
-            </Animated.View>
+            </View>
           )}
 
         </View>

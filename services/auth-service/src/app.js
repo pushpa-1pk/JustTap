@@ -11,6 +11,7 @@ const notFound = require("./middlewares/notFound.middleware");
 const errorHandler = require("./middlewares/error.middleware");
 const authRoutes = require("./routes/auth.routes");
 const healthRoutes = require("./routes/health.routes");
+const internalRoutes = require("./routes/internal.routes");
 const ApiResponse = require("./utils/ApiResponse");
 
 const app = express();
@@ -44,6 +45,7 @@ app.get("/api/v1/health", (req, res) => {
 
 app.use("/api/v1/health", healthRoutes);
 app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/internal", internalRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

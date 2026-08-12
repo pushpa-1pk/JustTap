@@ -1,248 +1,310 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, Pressable, ActivityIndicator, FlatList, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
-import axios from 'axios';
-import { getAbsoluteUrl } from '@/config/axios';
-import { secureStore } from '@/utils/secureStore';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadToCloudinary } from '@/utils/cloudinary';
+import { 
+  useGetProviderDocuments, 
+  useUploadProviderDocument, 
+  useDeleteProviderDocument,
+  useRequestApproval
+} from '@/hooks/useProviderProfile';
 import SvgIcon from '@/components/common/SvgIcon';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
-interface KYCConfig {
-  _id: string;
-  documentType: 'aadhar' | 'pan' | 'profile_photo' | 'trade_license' | 'gst' | 'shop_license';
-  fileUrl: string;
-  status: 'PENDING' | 'VERIFIED' | 'REJECTED';
-  adminRemarks?: string;
-  createdAt: string;
-}
-
 export default function KycUploadScreen() {
-  const { colors, typography, spacing, border } = useTheme();
+  const { colors, typography, spacing } = useTheme();
   const router = useRouter();
 
-  // Documents list states
-  const [documents, setDocuments] = useState<KYCConfig[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Selected document type
+  const [selectedDocType, setSelectedDocType] = useState<'aadhar' | 'pan' | 'trade_license' | 'gst' | 'shop_license'>('aadhar');
   const [isUploading, setIsUploading] = useState(false);
-  const [selectedDocType, setSelectedDocType] = useState<'aadhar' | 'pan' | 'trade_license'>('aadhar');
 
-  const fetchDocuments = async () => {
-    setIsLoading(true);
-    try {
-      const token = await secureStore.getAccessToken();
-      const docUrl = getAbsoluteUrl('/documents');
-      const response = await axios.get(docUrl, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (response.data?.success) {
-        setDocuments(response.data.data);
+  // Queries & Mutations
+  const { data: documents, isLoading, refetch } = useGetProviderDocuments();
+  const uploadDocMutation = useUploadProviderDocument();
+  const deleteDocMutation = useDeleteProviderDocument();
+  const requestApprovalMutation = useRequestApproval();
+
+  const handlePickAndUpload = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Denied', 'Please grant library permissions in settings.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      const localUri = result.assets[0].uri;
+      
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      setIsUploading(true);
+      
+      try {
+        // 1. Upload file to Cloudinary
+        const cloudinaryRes = await uploadToCloudinary(localUri);
+        
+        // 2. Upload fileUrl to Profile Service
+        await uploadDocMutation.mutateAsync({
+          documentType: selectedDocType,
+          fileUrl: cloudinaryRes.secure_url,
+        });
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Verification Uploaded', 'Your document has been uploaded successfully for review.');
+        refetch();
+      } catch (err: any) {
+        console.error('KYC Upload failed:', err);
+        Alert.alert('Upload Error', err.response?.data?.message || 'Failed to submit document');
+      } finally {
+        setIsUploading(false);
       }
-    } catch (err) {
-      console.warn('Fetch documents failed:', err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
-
-  const handleSimulatedUpload = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setIsUploading(true);
-    try {
-      const token = await secureStore.getAccessToken();
-      const uploadUrl = getAbsoluteUrl('/documents/upload');
-
-      // The backend expects documentType and fileUrl or multipart file
-      const response = await axios.post(
-        uploadUrl,
+  const handleDelete = (id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'Remove Document',
+      'Are you sure you want to delete this document?',
+      [
+        { text: 'Cancel', style: 'cancel' },
         {
-          documentType: selectedDocType,
-          fileUrl: `https://justtap-payouts.s3.amazonaws.com/kyc/${selectedDocType}_mock_file.jpg`,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` }
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDocMutation.mutateAsync(id);
+              refetch();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            } catch (err) {
+              console.error('Delete document failed:', err);
+            }
+          }
         }
-      );
+      ]
+    );
+  };
 
-      if (response.data?.success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Verification Uploaded', 'Our admin panel will review your document shortly.');
-        fetchDocuments();
-      }
+  const handleRequestApproval = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    try {
+      await requestApprovalMutation.mutateAsync();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Review Requested', 'Your profile details and documents have been sent to admins for review.');
     } catch (err: any) {
-      console.error('KYC Upload failed:', err);
-      Alert.alert('Upload Error', err.response?.data?.message || 'Failed to submit document');
-    } finally {
-      setIsUploading(false);
+      console.error('Request approval failed:', err);
+      Alert.alert('Error', err.response?.data?.message || 'Failed to request approval.');
     }
   };
 
   const getStatusStyle = (status: string) => {
-    switch (status) {
-      case 'VERIFIED':
-        return { bg: colors.secondary + '15', text: colors.secondary };
-      case 'REJECTED':
-        return { bg: colors.danger + '15', text: colors.danger };
+    switch (status?.toLowerCase()) {
+      case 'approved':
+        return { bg: colors.secondary + '15', text: colors.secondary, icon: 'shield-checkmark' };
+      case 'rejected':
+        return { bg: colors.danger + '15', text: colors.danger, icon: 'alert-circle' };
+      case 'under_review':
+        return { bg: colors.warning + '15', text: colors.warning, icon: 'time' };
       default:
-        return { bg: colors.warning + '15', text: colors.warning };
+        return { bg: colors.textSecondary + '15', text: colors.textSecondary, icon: 'ellipse' };
     }
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background, padding: spacing.lg }]}>
-      
-      {/* Selector input card */}
-      <View style={[styles.cardForm, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.sm }]}>Verify Identity</Text>
-        <Text style={[typography.bodyMedium, { color: colors.textSecondary, marginBottom: spacing.md }]}>
-          Upload a clear photograph of your ID document.
-        </Text>
-
-        <Text style={[styles.label, typography.bodySmall, { color: colors.textSecondary }]}>CHOOSE DOCUMENT TYPE</Text>
-        <View style={styles.pickerRow}>
-          {(['aadhar', 'pan', 'trade_license'] as const).map((type) => (
-            <Pressable
-              key={type}
-              style={[
-                styles.pickerItem,
-                { 
-                  backgroundColor: selectedDocType === type ? colors.secondary : colors.surfaceVariant,
-                  borderColor: selectedDocType === type ? colors.secondary : colors.border
-                }
-              ]}
-              onPress={() => setSelectedDocType(type)}
-            >
-              <Text style={[
-                typography.caption, 
-                { color: selectedDocType === type ? '#FFFFFF' : colors.text, fontWeight: '700', textTransform: 'uppercase' }
-              ]}>
-                {type.replace('_', ' ')}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <Pressable 
-          style={[styles.uploadBtn, { backgroundColor: colors.primary, marginTop: spacing.xl }]}
-          onPress={handleSimulatedUpload}
-          disabled={isUploading}
-        >
-          {isUploading ? (
-            <ActivityIndicator size="small" color={colors.onPrimary} />
-          ) : (
-            <Text style={[typography.buttonText, { color: colors.onPrimary }]}>Simulate Photo Capture & Upload</Text>
-          )}
-        </Pressable>
+  if (isLoading) {
+    return (
+      <View style={[styles.center, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.secondary} />
       </View>
+    );
+  }
 
-      {/* Uploaded Documents List */}
-      <Text style={[styles.sectionTitle, typography.h3, { color: colors.text, marginTop: spacing.lg }]}>
-        Verification Status
-      </Text>
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <FlatList
+        data={documents}
+        keyExtractor={(item) => item._id}
+        contentContainerStyle={styles.scroll}
+        ListHeaderComponent={
+          <>
+            {/* Form Selection card */}
+            <View style={[styles.cardForm, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.xs }]}>Verify Credentials</Text>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 12 }]}>
+                Choose a document type, select your file, and upload to verify your account credentials.
+              </Text>
 
-      {isLoading ? (
-        <ActivityIndicator size="small" color={colors.secondary} style={{ marginTop: 20 }} />
-      ) : documents.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>No documents uploaded yet.</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={documents}
-          keyExtractor={(item) => item._id}
-          contentContainerStyle={{ gap: 12, marginTop: 12 }}
-          renderItem={({ item }) => {
-            const statusStyle = getStatusStyle(item.status);
-            return (
-              <View style={[styles.docCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-                <View style={styles.docHeader}>
-                  <Text style={[typography.bodyMedium, { color: colors.text, fontWeight: '700', textTransform: 'uppercase' }]}>
-                    📄 {item.documentType.replace('_', ' ')}
-                  </Text>
-                  <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
-                    <Text style={[typography.caption, { color: statusStyle.text, fontWeight: '800' }]}>
-                      {item.status}
+              {/* Selector types */}
+              <View style={styles.pickerContainer}>
+                {(['aadhar', 'pan', 'trade_license', 'gst', 'shop_license'] as const).map((type) => (
+                  <Pressable
+                    key={type}
+                    style={[
+                      styles.pickerBtn,
+                      { borderColor: colors.border },
+                      selectedDocType === type && { backgroundColor: colors.secondary, borderColor: colors.secondary }
+                    ]}
+                    onPress={() => setSelectedDocType(type)}
+                  >
+                    <Text style={[
+                      typography.bodySmall,
+                      { color: colors.text },
+                      selectedDocType === type && { color: colors.onSecondary, fontWeight: '700' }
+                    ]}>
+                      {type.toUpperCase().replace('_', ' ')}
                     </Text>
-                  </View>
-                </View>
-                {item.adminRemarks && (
-                  <Text style={[typography.caption, { color: colors.danger, marginTop: 8 }]}>
-                    Remarks: {item.adminRemarks}
-                  </Text>
-                )}
-                <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 6 }]}>
-                  Submitted on: {new Date(item.createdAt).toLocaleDateString()}
-                </Text>
+                  </Pressable>
+                ))}
               </View>
-            );
-          }}
-        />
-      )}
 
+              <Pressable 
+                style={[styles.uploadBtn, { backgroundColor: colors.secondary }]}
+                onPress={handlePickAndUpload}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <ActivityIndicator color={colors.onSecondary} />
+                ) : (
+                  <>
+                    <Ionicons name="cloud-upload" size={18} color={colors.onSecondary} style={{ marginRight: 8 }} />
+                    <Text style={[typography.buttonText, { color: colors.onSecondary }]}>Pick & Upload Document</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+
+            {/* Request review banner */}
+            {documents && documents.length > 0 && (
+              <Pressable 
+                style={[styles.reviewBtn, { backgroundColor: colors.text }]}
+                onPress={handleRequestApproval}
+                disabled={requestApprovalMutation.isPending}
+              >
+                {requestApprovalMutation.isPending ? (
+                  <ActivityIndicator color={colors.surface} />
+                ) : (
+                  <>
+                    <Ionicons name="checkbox" size={18} color={colors.surface} style={{ marginRight: 8 }} />
+                    <Text style={[typography.buttonText, { color: colors.surface }]}>Submit Profile for Verification Review</Text>
+                  </>
+                )}
+              </Pressable>
+            )}
+
+            <Text style={[typography.h3, { color: colors.text, marginTop: spacing.lg, marginBottom: spacing.md }]}>
+              Uploaded Documents ({documents?.length || 0})
+            </Text>
+          </>
+        }
+        renderItem={({ item }) => {
+          const status = getStatusStyle(item.status);
+          return (
+            <View style={[styles.docCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <View style={styles.docHeader}>
+                <Ionicons name="document-text" size={24} color={colors.textSecondary} />
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={[typography.bodyLarge, { color: colors.text, fontWeight: '700' }]}>
+                    {item.documentType.toUpperCase().replace('_', ' ')}
+                  </Text>
+                  <Text style={[typography.caption, { color: colors.textSecondary }]}>
+                    Uploaded: {new Date(item.uploadedAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <Pressable onPress={() => handleDelete(item._id)} style={{ padding: 4 }}>
+                  <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                </Pressable>
+              </View>
+
+              {/* Status indicator row */}
+              <View style={styles.statusRow}>
+                <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
+                  <Ionicons name={status.icon as any} size={12} color={status.text} />
+                  <Text style={[styles.statusText, { color: status.text }]}>{item.status.toUpperCase()}</Text>
+                </View>
+                {item.rejectionReason ? (
+                  <Text style={[typography.caption, { color: colors.danger, flex: 1, marginLeft: 10 }]} numberOfLines={2}>
+                    Reason: {item.rejectionReason}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          );
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scroll: { padding: 20, paddingBottom: 60 },
   cardForm: {
-    padding: 20,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    elevation: 2,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    marginBottom: 16,
   },
-  label: {
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  pickerRow: {
+  pickerContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
+    marginVertical: 12,
   },
-  pickerItem: {
-    flex: 1,
-    height: 40,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    justifyContent: 'center',
-    alignItems: 'center',
+  pickerBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
   },
   uploadBtn: {
+    height: 48,
+    borderRadius: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  reviewBtn: {
     height: 52,
-    borderRadius: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  sectionTitle: {
-    fontWeight: '700',
-  },
-  emptyContainer: {
-    padding: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 16,
   },
   docCard: {
-    borderRadius: 16,
-    borderWidth: 1.5,
-    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
   },
   docHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  statusBadge: {
-    paddingHorizontal: 10,
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  statusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
+  },
+  statusText: {
+    fontSize: 9,
+    fontWeight: '800',
+    marginLeft: 4,
   },
 });

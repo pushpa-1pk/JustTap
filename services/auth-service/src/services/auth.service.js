@@ -9,7 +9,8 @@ const tokenBlacklistService = require("./token-blacklist.service");
 const userRepository = require("../repositories/user.repository");
 const {
   resolveSignupRole,
-  assertExistingUserRole,
+  getUserRoles,
+  resolveExistingUserRole,
 } = require("../utils/auth-role.util");
 
 const {
@@ -30,27 +31,30 @@ class AuthService {
 
     const existingUser = await userRepository.findByPhone(phone);
 
-    const redisKey = getOTPKey(phone);
-    const otpExists = await redisService.exists(redisKey);
+    const lockKey = `otp_lock:${phone}`;
+    const isLocked = await redisService.exists(lockKey);
 
-    if (otpExists) {
+    if (isLocked) {
       throw new ApiError(
         429,
-        "OTP already sent. Please wait before requesting another OTP."
+        "Please wait 60 seconds before requesting another OTP."
       );
     }
 
     const otp = generateOTP();
     const hashedOTP = await hashOTP(otp);
 
+    const redisKey = getOTPKey(phone);
     await redisService.set(redisKey, hashedOTP, OTP.EXPIRY_SECONDS);
     await redisService.set(getOTPAttemptsKey(phone), 0, OTP.EXPIRY_SECONDS);
+    await redisService.set(lockKey, "1", 60); // 60 seconds resend cooldown
 
     try {
       await smsService.sendOTP(phone, otp);
     } catch (error) {
       await redisService.delete(redisKey);
       await redisService.delete(getOTPAttemptsKey(phone));
+      await redisService.delete(lockKey);
       throw error;
     }
 
@@ -128,20 +132,29 @@ class AuthService {
       user = await userRepository.create({
         phone,
         role: signupRole,
+        roles: [signupRole],
         isPhoneVerified: true,
       });
     } else {
+      let loginRole;
+
       try {
-        assertExistingUserRole(user, role);
+        loginRole = resolveExistingUserRole(user, role);
       } catch (error) {
-        throw new ApiError(409, error.message);
+        throw new ApiError(400, error.message);
       }
 
+      const nextRoles = Array.from(new Set([...getUserRoles(user), loginRole]));
+      const updateData = {
+        role: loginRole,
+        roles: nextRoles,
+      };
+
       if (!user.isPhoneVerified) {
-        user = await userRepository.updateById(user._id, {
-          isPhoneVerified: true,
-        });
+        updateData.isPhoneVerified = true;
       }
+
+      user = await userRepository.updateById(user._id, updateData);
     }
 
     await redisService.delete(otpKey);
@@ -207,6 +220,7 @@ class AuthService {
         id: user._id.toString(),
         phone: user.phone,
         role: user.role,
+        roles: getUserRoles(user),
         isPhoneVerified: user.isPhoneVerified,
         profileCompleted: user.profileCompleted,
         accountStatus: user.accountStatus,
@@ -307,6 +321,7 @@ class AuthService {
       id: user._id.toString(),
       phone: user.phone,
       role: user.role,
+      roles: getUserRoles(user),
       isPhoneVerified: user.isPhoneVerified,
       isEmailVerified: user.isEmailVerified,
       profileCompleted: user.profileCompleted,
@@ -388,6 +403,21 @@ class AuthService {
     }
   }
 
+  async setProfileCompleted(userId, profileCompleted) {
+    const user = await userRepository.updateById(userId, {
+      profileCompleted,
+    });
+
+    if (!user) {
+      throw new ApiError(404, "User not found.");
+    }
+
+    return {
+      id: user._id.toString(),
+      profileCompleted: user.profileCompleted,
+    };
+  }
+
   async getActiveUserById(userId) {
     const user = await userRepository.findById(userId);
 
@@ -421,6 +451,88 @@ class AuthService {
       user,
       session,
       isNewUser,
+    };
+  }
+
+  async deleteUserAccount(userId) {
+    await refreshTokenService.revokeAllByUser(userId);
+    await sessionService.deleteAllByUser(userId);
+    await userRepository.incrementTokenVersion(userId);
+    await userRepository.updateById(userId, { accountStatus: ACCOUNT_STATUS.DELETED });
+
+    await auditService.logLogout({
+      userId,
+      scope: "account-deleted",
+    });
+
+    await eventService.publish("UserAccountDeleted", {
+      userId: userId.toString(),
+      timestamp: new Date(),
+    });
+
+    return { deleted: true };
+  }
+
+  async becomeProvider(userId) {
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(404, "User not found.");
+    }
+    if (!user.roles.includes("provider")) {
+      user.roles.push("provider");
+    }
+    user.role = "provider";
+    await user.save();
+
+    const accessToken = jwtService.generateAccessToken(user, {
+      deviceId: "mobile-app-client",
+    });
+    const refreshToken = jwtService.generateRefreshToken(user, {
+      deviceId: "mobile-app-client",
+    });
+
+    return {
+      user: {
+        id: user._id.toString(),
+        phone: user.phone,
+        role: user.role,
+        roles: user.roles,
+        accountStatus: user.accountStatus,
+      },
+      accessToken,
+      refreshToken,
+    };
+  }
+
+  async switchRole(userId, requestedRole) {
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new ApiError(404, "User not found.");
+    }
+    const cleanRole = String(requestedRole).toLowerCase();
+    if (!user.roles.includes(cleanRole)) {
+      throw new ApiError(400, `User does not possess the ${cleanRole} role.`);
+    }
+    user.role = cleanRole;
+    await user.save();
+
+    const accessToken = jwtService.generateAccessToken(user, {
+      deviceId: "mobile-app-client",
+    });
+    const refreshToken = jwtService.generateRefreshToken(user, {
+      deviceId: "mobile-app-client",
+    });
+
+    return {
+      user: {
+        id: user._id.toString(),
+        phone: user.phone,
+        role: user.role,
+        roles: user.roles,
+        accountStatus: user.accountStatus,
+      },
+      accessToken,
+      refreshToken,
     };
   }
 }

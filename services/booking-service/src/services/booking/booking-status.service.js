@@ -55,7 +55,7 @@ class BookingStatusService {
   /**
    * Verifies incoming cleartext codes against secure bcrypt hashes to authorize handshakes
    */
-  async verifyHandshake(bookingId, rawOtp, purpose, actor, session) {
+  async verifyHandshake(bookingId, rawOtp, purpose, actor, completionPhotos = [], session) {
     const booking = await this.bookingRepo.findById(bookingId);
     if (!booking) throw new ApiError('Target booking instance unmapped or invalid.', 404);
 
@@ -88,11 +88,14 @@ class BookingStatusService {
     }
 
     if (nextStatus === BOOKING_STATUS.SERVICE_COMPLETED) {
-      await this.bookingRepo.update(bookingId, { paymentStatus: PAYMENT_STATUS.PAID }, session);
+      const updateData = { paymentStatus: PAYMENT_STATUS.PAID };
+      if (Array.isArray(completionPhotos) && completionPhotos.length > 0) {
+        updateData.completionPhotos = completionPhotos;
+      }
+      await this.bookingRepo.update(bookingId, updateData, session);
     }
 
     return updatedBooking;
   }
 }
-
 module.exports = BookingStatusService;

@@ -6,6 +6,9 @@ import { useColorScheme } from 'react-native';
 import { Colors } from '../constants/theme';
 import { StatusBar } from 'expo-status-bar';
 import OfflineBanner from '../components/common/OfflineBanner';
+import { getDefaultRouteForRole } from '../utils/auth';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from '../config/reactQuery';
 
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useSelector((state: RootState) => state.auth);
@@ -19,6 +22,21 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
     const inCustomerGroup = segments[0] === '(customer)';
     const inProviderGroup = segments[0] === '(provider)';
     const inAdminGroup = segments[0] === '(admin)';
+    const inRolePicker = inAuthGroup && segments[1] === 'register';
+    const inCustomerProfile = inCustomerGroup && (
+      segments[2] === 'profile' || 
+      segments[1] === 'edit-profile' || 
+      segments[1] === 'addresses'
+    );
+    const inProviderProfile = inProviderGroup && (
+      segments[2] === 'profile' || 
+      segments[1] === 'edit-profile' || 
+      segments[1] === 'business-info' || 
+      segments[1] === 'kyc-upload' || 
+      segments[1] === 'bank-setup' ||
+      segments[1] === 'service-areas' ||
+      segments[1] === 'working-hours'
+    );
 
     // Segment routing lifecycle checks
     if (!isAuthenticated) {
@@ -27,17 +45,34 @@ function NavigationGuard({ children }: { children: React.ReactNode }) {
         router.replace('/(auth)/login');
       }
     } else if (user) {
+      const defaultRoute = user.isProfileComplete
+        ? getDefaultRouteForRole(user.role)
+        : user.role === 'PROVIDER'
+          ? '/(provider)/(tabs)/profile'
+          : '/(customer)/(tabs)/profile';
+
       // Redirect authenticated users away from login/onboarding screens
       if (inAuthGroup) {
-        if (user.role === 'CUSTOMER') {
-          router.replace('/(customer)/(tabs)/home');
-        } else if (user.role === 'PROVIDER') {
-          router.replace('/(provider)/(tabs)/dashboard');
-        } else if (user.role === 'ADMIN') {
-          router.replace('/(admin)/dashboard');
+        if (inRolePicker) {
+          return;
+        }
+
+        router.replace(defaultRoute);
+        return;
+      }
+
+      if (!user.isProfileComplete) {
+        if (user.role === 'PROVIDER' && !inProviderProfile) {
+          router.replace('/(provider)/(tabs)/profile');
+          return;
+        }
+
+        if (user.role === 'CUSTOMER' && !inCustomerProfile) {
+          router.replace('/(customer)/(tabs)/profile');
+          return;
         }
       }
-      
+
       // Enforce role-based access boundaries
       if (user.role === 'CUSTOMER' && (inProviderGroup || inAdminGroup)) {
         router.replace('/(customer)/(tabs)/home');
@@ -59,24 +94,26 @@ export default function RootLayout() {
 
   return (
     <Provider store={store}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
-      <OfflineBanner />
-      <NavigationGuard>
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: {
-              backgroundColor: colors.background,
-            },
-          }}
-        >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(customer)" options={{ headerShown: false }} />
-          <Stack.Screen name="(provider)" options={{ headerShown: false }} />
-          <Stack.Screen name="(admin)" options={{ headerShown: false }} />
-        </Stack>
-      </NavigationGuard>
+      <QueryClientProvider client={queryClient}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <OfflineBanner />
+        <NavigationGuard>
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: {
+                backgroundColor: colors.background,
+              },
+            }}
+          >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(customer)" options={{ headerShown: false }} />
+            <Stack.Screen name="(provider)" options={{ headerShown: false }} />
+            <Stack.Screen name="(admin)" options={{ headerShown: false }} />
+          </Stack>
+        </NavigationGuard>
+      </QueryClientProvider>
     </Provider>
   );
 }

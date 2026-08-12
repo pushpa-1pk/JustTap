@@ -1,20 +1,17 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, ActivityIndicator, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { secureStore } from '../utils/secureStore';
 import { setCredentials, logout } from '../redux/slices/authSlice';
-import { useTheme } from '../hooks/useTheme';
 import axios from 'axios';
 import { getAbsoluteUrl } from '../config/axios';
-import { normalizeProfileCompletion, normalizeUserRole } from '../utils/auth';
+import { getDefaultRouteForRole, normalizeProfileCompletion, normalizeUserRole, normalizeUserRoles } from '../utils/auth';
 
 import SplashLoader from '../components/common/SplashLoader';
 
 export default function InitialRouteIndex() {
   const router = useRouter();
-  const { colors } = useTheme();
   const dispatch = useDispatch();
   const { isAuthenticated, isLoading, user } = useSelector((state: RootState) => state.auth);
 
@@ -27,6 +24,11 @@ export default function InitialRouteIndex() {
           dispatch(logout());
           return;
         }
+
+        const cachedRole = await secureStore.getRole();
+        const userRole = normalizeUserRole(cachedRole);
+
+
 
         // Call /me to verify token validity and retrieve fresh profile flags
         // Using axios directly to avoid initial load interceptor conflicts
@@ -42,6 +44,7 @@ export default function InitialRouteIndex() {
               id: fetchedUser.id || fetchedUser._id,
               phone: fetchedUser.phone,
               role: normalizeUserRole(fetchedUser.role),
+              roles: normalizeUserRoles(fetchedUser.roles, fetchedUser.role),
               accountStatus: fetchedUser.accountStatus,
               isProfileComplete: normalizeProfileCompletion(fetchedUser),
             },
@@ -50,7 +53,36 @@ export default function InitialRouteIndex() {
         } else {
           dispatch(logout());
         }
-      } catch (error) {
+      } catch (error: any) {
+        if (axios.isAxiosError(error)) {
+          // If the backend strictly rejected the token with 401/403, clear credentials
+          if (error.response?.status === 401 || error.response?.status === 403) {
+            dispatch(logout());
+            return;
+          }
+          
+          // For network/connection errors (offline state), do NOT log out the user.
+          // Restore credentials using cached storage values so they stay on home/dashboard.
+          console.warn('Network offline during session restoration:', error.message);
+          const cachedToken = await secureStore.getAccessToken();
+          const cachedRole = await secureStore.getRole();
+          if (cachedToken && cachedRole) {
+            const userRole = normalizeUserRole(cachedRole);
+            dispatch(setCredentials({
+              user: {
+                id: 'cached-user',
+                phone: 'cached-phone',
+                role: userRole,
+                roles: [userRole],
+                accountStatus: 'ACTIVE',
+                isProfileComplete: true,
+              },
+              accessToken: cachedToken
+            }));
+            return;
+          }
+        }
+        
         console.warn('Session restoration failed:', error);
         dispatch(logout());
       }
@@ -64,16 +96,12 @@ export default function InitialRouteIndex() {
     if (isLoading) return;
 
     if (isAuthenticated && user) {
-      // Role-based redirection guards
-      if (user.role === 'CUSTOMER') {
-        router.replace('/(customer)/(tabs)/home');
-      } else if (user.role === 'PROVIDER') {
-        router.replace('/(provider)/(tabs)/dashboard');
-      } else if (user.role === 'ADMIN') {
-        router.replace('/(admin)/dashboard');
-      } else {
-        router.replace('/(auth)/login');
+      if (!user.isProfileComplete) {
+        router.replace(user.role === 'PROVIDER' ? '/(provider)/(tabs)/profile' : '/(customer)/(tabs)/profile');
+        return;
       }
+
+      router.replace(getDefaultRouteForRole(user.role));
     } else {
       router.replace('/(auth)/login');
     }
@@ -81,11 +109,3 @@ export default function InitialRouteIndex() {
 
   return <SplashLoader />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-});

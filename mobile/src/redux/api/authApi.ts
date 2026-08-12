@@ -1,11 +1,12 @@
 import { baseApi } from './baseApi';
-import { AppUserRole, AuthPlatform, normalizeProfileCompletion, normalizeUserRole } from '@/utils/auth';
+import { AppUserRole, AuthPlatform, normalizeProfileCompletion, normalizeUserRole, normalizeUserRoles } from '@/utils/auth';
 
 type RawAuthUser = {
   id?: string;
   _id?: string;
   phone: string;
   role: string;
+  roles?: string[];
   accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
   isProfileComplete?: boolean;
   profileCompleted?: boolean;
@@ -28,6 +29,7 @@ const normalizeUser = (user: RawAuthUser) => ({
   id: user.id || user._id || '',
   phone: user.phone,
   role: normalizeUserRole(user.role),
+  roles: normalizeUserRoles(user.roles, user.role),
   accountStatus: user.accountStatus,
   isProfileComplete: normalizeProfileCompletion(user),
 });
@@ -54,6 +56,7 @@ export const authApi = baseApi.injectEndpoints({
           id: string;
           phone: string;
           role: AppUserRole;
+          roles: AppUserRole[];
           accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
           isProfileComplete: boolean;
         };
@@ -87,6 +90,7 @@ export const authApi = baseApi.injectEndpoints({
         id: string;
         phone: string;
         role: AppUserRole;
+        roles: AppUserRole[];
         accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
         isProfileComplete: boolean;
       };

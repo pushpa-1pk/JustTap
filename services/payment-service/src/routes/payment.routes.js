@@ -83,4 +83,71 @@ router.post(
   paymentController.payoutProviderFunds
 );
 
+/* ====================================================================== */
+/* Customer Profile Module Extension Nodes                                */
+/* ====================================================================== */
+
+router.get(
+  "/wallet/customer",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.getCustomerWallet
+);
+
+router.get(
+  "/wallet/customer/transactions",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.getCustomerTransactions
+);
+
+router.post(
+  "/wallet/customer/add-funds",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.addCustomerFunds
+);
+
+router.get(
+  "/methods",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.getPaymentMethods
+);
+
+router.post(
+  "/methods",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.addPaymentMethod
+);
+
+router.delete(
+  "/methods/:id",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.deletePaymentMethod
+);
+
+router.put(
+  "/methods/:id/default",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.setDefaultPaymentMethod
+);
+
+router.get(
+  "/coupons/available",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.getAvailableCoupons
+);
+
+router.get(
+  "/invoices",
+  verifyAuthenticationToken,
+  enforceUserRole(["CUSTOMER"]),
+  paymentController.getCustomerInvoices
+);
+
 module.exports = router;

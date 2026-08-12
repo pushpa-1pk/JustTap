@@ -55,7 +55,8 @@ const advanceStatusSchema = Joi.object({
 
 const verifyHandshakeSchema = Joi.object({
   rawOtp: Joi.string().pattern(/^\d{6}$/).required(),
-  purpose: Joi.string().valid(...Object.values(OTP_PURPOSE)).required()
+  purpose: Joi.string().valid(...Object.values(OTP_PURPOSE)).required(),
+  completionPhotos: Joi.array().items(Joi.string().uri()).optional()
 });
 
 module.exports = {

@@ -20,6 +20,21 @@ class ReviewRepository extends BaseRepository {
 
     return { docs, total, page, pages: Math.ceil(total / limit) };
   }
+
+  async getPaginatedReviewsByCustomer(customerId, page, limit) {
+    const query = { customerId };
+    const skip = (page - 1) * limit;
+
+    const docs = await this.model.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = await this.model.countDocuments(query);
+
+    return { docs, total, page, pages: Math.ceil(total / limit) };
+  }
 }
 
 module.exports = new ReviewRepository();

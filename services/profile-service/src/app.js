@@ -21,6 +21,7 @@ const documentRoutes = require("./routes/document.routes");
 const bankDetailsRoutes = require("./routes/bank-details.routes");
 const adminRoutes = require("./routes/admin.routes");
 const internalRoutes = require("./routes/internal.routes");
+const supportRoutes = require("./routes/support.routes");
 
 const app = express();
 const uploadsDirectory = path.resolve(__dirname, "..", env.UPLOADS_DIR_NAME);
@@ -67,6 +68,7 @@ app.use("/api/v1/documents", documentRoutes);
 app.use("/api/v1/bank-details", bankDetailsRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/internal", internalRoutes);
+app.use("/api/v1/support", supportRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

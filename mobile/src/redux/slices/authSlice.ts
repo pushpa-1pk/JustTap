@@ -1,9 +1,11 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { AppUserRole } from '@/utils/auth';
 
 interface User {
   id: string;
   phone: string;
-  role: 'CUSTOMER' | 'PROVIDER' | 'ADMIN';
+  role: AppUserRole;
+  roles: AppUserRole[];
   accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
   isProfileComplete?: boolean;
 }
@@ -49,6 +51,11 @@ const authSlice = createSlice({
         state.user = { ...state.user, ...action.payload };
       }
     },
+    switchRole: (state, action: PayloadAction<AppUserRole>) => {
+      if (state.user && state.user.roles.includes(action.payload)) {
+        state.user.role = action.payload;
+      }
+    },
     logout: (state) => {
       state.user = null;
       state.accessToken = null;
@@ -59,7 +66,7 @@ const authSlice = createSlice({
   },
 });
 
-export const { setCredentials, setLoading, setError, updateUser, logout } =
+export const { setCredentials, setLoading, setError, updateUser, switchRole, logout } =
   authSlice.actions;
 
 export default authSlice.reducer;

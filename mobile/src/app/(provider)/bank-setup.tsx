@@ -1,36 +1,47 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useTheme } from '@/hooks/useTheme';
-import { useGetBankDetailsQuery, useCreateBankDetailsMutation, useUpdateBankDetailsMutation } from '@/redux/api/profileApi';
+import { 
+  useGetProviderBankDetails, 
+  useCreateProviderBankDetails, 
+  useUpdateProviderBankDetails,
+  useDeleteProviderBankDetails
+} from '@/hooks/useProviderProfile';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 
-// Zod Validation Schema for Bank Setup
+// Zod Validation Schema for Bank Setup.
 const bankSchema = z.object({
   accountHolderName: z.string().min(3, 'Holder name must be at least 3 characters'),
-  accountNumber: z.string().min(9, 'Account number must be 9-18 digits').max(18, 'Account number must be 9-18 digits').regex(/^\d+$/, 'Account number must contain only digits'),
+  accountNumber: z
+    .string()
+    .regex(/^\d*$/, 'Account number must contain only digits')
+    .refine((value) => value === '' || (value.length >= 9 && value.length <= 18), {
+      message: 'Account number must be 9-18 digits',
+    }),
   ifscCode: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC code format (e.g. HDFC0123456)'),
   bankName: z.string().min(3, 'Bank name must be at least 3 characters'),
   accountType: z.enum(['SAVINGS', 'CURRENT']),
+  upiId: z.string().optional().or(z.literal('')),
 });
 
 type FormData = z.infer<typeof bankSchema>;
 
 export default function BankSetupScreen() {
-  const { colors, typography, spacing, border } = useTheme();
+  const { colors, typography, spacing } = useTheme();
   const router = useRouter();
 
   // Queries & Mutations
-  const { data: bankRes, isLoading: isBankLoading, refetch } = useGetBankDetailsQuery();
-  const [createBankDetails, { isLoading: isCreating }] = useCreateBankDetailsMutation();
-  const [updateBankDetails, { isLoading: isUpdating }] = useUpdateBankDetailsMutation();
+  const { data: bank, isLoading: isBankLoading, refetch } = useGetProviderBankDetails();
+  const createBankDetails = useCreateProviderBankDetails();
+  const updateBankDetails = useUpdateProviderBankDetails();
+  const deleteBankDetails = useDeleteProviderBankDetails();
 
-  const existingBank = bankRes?.data;
-
-  const { control, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
+  const { control, handleSubmit, setValue, setError, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(bankSchema),
     defaultValues: {
       accountHolderName: '',
@@ -38,36 +49,72 @@ export default function BankSetupScreen() {
       ifscCode: '',
       bankName: '',
       accountType: 'SAVINGS',
+      upiId: '',
     }
   });
 
   // Pre-populate fields if bank details exist
   useEffect(() => {
-    if (existingBank) {
-      setValue('accountHolderName', existingBank.accountHolderName);
-      setValue('accountNumber', existingBank.accountNumber);
-      setValue('ifscCode', existingBank.ifscCode);
-      setValue('bankName', existingBank.bankName);
-      setValue('accountType', existingBank.accountType);
+    if (bank) {
+      setValue('accountHolderName', bank.accountHolderName);
+      setValue('ifscCode', bank.ifscCode);
+      setValue('bankName', bank.bankName);
+      setValue('accountType', bank.accountType);
+      setValue('upiId', bank.upiId || '');
     }
-  }, [existingBank, setValue]);
+  }, [bank, setValue]);
 
   const onSubmit = async (data: FormData) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    if (!bank && !data.accountNumber) {
+      setError('accountNumber', { message: 'Account number is required' });
+      return;
+    }
+
     try {
-      if (existingBank) {
-        // Edit Bank Details
-        await updateBankDetails(data).unwrap();
+      if (bank) {
+        // A blank field means "keep the stored number", so omit the key entirely.
+        const { accountNumber, ...rest } = data;
+        await updateBankDetails.mutateAsync(accountNumber ? data : rest);
       } else {
         // Create Bank Details
-        await createBankDetails(data).unwrap();
+        await createBankDetails.mutateAsync(data);
       }
       refetch();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Success', 'Bank details saved successfully!');
       router.back();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Submit bank details failed:', err);
+      Alert.alert('Submit Error', err.response?.data?.message || 'Failed to save bank info.');
     }
+  };
+
+  const handleDeleteBank = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'Remove Payout Bank',
+      'Are you sure you want to remove your payout bank details? You will not be able to trigger withdrawals.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteBankDetails.mutateAsync();
+              refetch();
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              Alert.alert('Removed', 'Bank details removed successfully.');
+              router.back();
+            } catch (err) {
+              console.error('Remove bank details failed:', err);
+            }
+          }
+        }
+      ]
+    );
   };
 
   if (isBankLoading) {
@@ -78,202 +125,235 @@ export default function BankSetupScreen() {
     );
   }
 
+  const isSaving = createBankDetails.isPending || updateBankDetails.isPending;
+
   return (
     <KeyboardAvoidingView 
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
-        <View style={styles.form}>
-          <Text style={[typography.bodyMedium, { color: colors.textSecondary, marginBottom: spacing.lg }]}>
-            Configure your payout account details below. Payouts are made directly to this account upon job completions.
-          </Text>
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]} contentContainerStyle={styles.scroll}>
+        
+        {/* Status display */}
+        {bank && (
+          <View style={[styles.verifiedBanner, { backgroundColor: bank.verified ? colors.secondary + '12' : colors.warning + '12', borderColor: bank.verified ? colors.secondary : colors.warning }]}>
+            <Ionicons name={bank.verified ? 'shield-checkmark' : 'time'} size={20} color={bank.verified ? colors.secondary : colors.warning} />
+            <Text style={[typography.bodyMedium, { color: bank.verified ? colors.secondary : colors.warning, marginLeft: 8, fontWeight: '700' }]}>
+              {bank.verified ? 'Bank details are verified and active.' : 'Verification review pending.'}
+            </Text>
+          </View>
+        )}
 
-          {/* Account Holder */}
-          <Text style={[styles.label, typography.bodySmall, { color: colors.textSecondary }]}>ACCOUNT HOLDER NAME</Text>
+        <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>Payout Credentials</Text>
+
+          <Text style={styles.label}>Account Holder Name</Text>
           <Controller
             control={control}
             name="accountHolderName"
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                style={[styles.input, typography.bodyLarge, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                placeholder="Enter holder's name"
-                placeholderTextColor={colors.textSecondary}
+                style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surfaceVariant }]}
                 onBlur={onBlur}
                 onChangeText={onChange}
                 value={value}
-              />
-            )}
-          />
-          {errors.accountHolderName && (
-            <Text style={[styles.errorText, typography.bodySmall, { color: colors.danger }]}>
-              {errors.accountHolderName.message}
-            </Text>
-          )}
-
-          {/* Bank Name */}
-          <Text style={[styles.label, typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.md }]}>BANK NAME</Text>
-          <Controller
-            control={control}
-            name="bankName"
-            render={({ field: { onChange, onBlur, value } }) => (
-              <TextInput
-                style={[styles.input, typography.bodyLarge, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                placeholder="e.g. HDFC Bank"
+                placeholder="Account Holder Name"
                 placeholderTextColor={colors.textSecondary}
-                onBlur={onBlur}
-                onChangeText={onChange}
-                value={value}
               />
             )}
           />
-          {errors.bankName && (
-            <Text style={[styles.errorText, typography.bodySmall, { color: colors.danger }]}>
-              {errors.bankName.message}
-            </Text>
-          )}
+          {errors.accountHolderName && <Text style={styles.error}>{errors.accountHolderName.message}</Text>}
 
-          {/* Account Number */}
-          <Text style={[styles.label, typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.md }]}>ACCOUNT NUMBER</Text>
+          <Text style={styles.label}>Account Number</Text>
           <Controller
             control={control}
             name="accountNumber"
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                style={[styles.input, typography.bodyLarge, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                placeholder="Enter account number"
-                placeholderTextColor={colors.textSecondary}
-                keyboardType="number-pad"
+                style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surfaceVariant }]}
                 onBlur={onBlur}
                 onChangeText={onChange}
                 value={value}
+                placeholder={bank ? bank.accountNumberMasked : 'Enter full account number'}
+                keyboardType="number-pad"
+                placeholderTextColor={colors.textSecondary}
               />
             )}
           />
-          {errors.accountNumber && (
-            <Text style={[styles.errorText, typography.bodySmall, { color: colors.danger }]}>
-              {errors.accountNumber.message}
-            </Text>
-          )}
+          {errors.accountNumber && <Text style={styles.error}>{errors.accountNumber.message}</Text>}
 
-          {/* IFSC Code */}
-          <Text style={[styles.label, typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.md }]}>IFSC CODE</Text>
+          <Text style={styles.label}>Bank IFSC Code</Text>
           <Controller
             control={control}
             name="ifscCode"
             render={({ field: { onChange, onBlur, value } }) => (
               <TextInput
-                style={[styles.input, typography.bodyLarge, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
-                placeholder="IFSC Code (e.g. HDFC0123456)"
-                placeholderTextColor={colors.textSecondary}
-                autoCapitalize="characters"
+                style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surfaceVariant }]}
                 onBlur={onBlur}
-                onChangeText={onChange}
+                onChangeText={(val) => onChange(val.toUpperCase())}
                 value={value}
+                autoCapitalize="characters"
+                placeholder="IFSC Code (e.g. SBIN0004030)"
+                placeholderTextColor={colors.textSecondary}
               />
             )}
           />
-          {errors.ifscCode && (
-            <Text style={[styles.errorText, typography.bodySmall, { color: colors.danger }]}>
-              {errors.ifscCode.message}
-            </Text>
-          )}
+          {errors.ifscCode && <Text style={styles.error}>{errors.ifscCode.message}</Text>}
 
-          {/* Account Type Toggle */}
-          <Text style={[styles.label, typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.md }]}>ACCOUNT TYPE</Text>
+          <Text style={styles.label}>Bank Name</Text>
+          <Controller
+            control={control}
+            name="bankName"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surfaceVariant }]}
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value}
+                placeholder="Bank Name (e.g. State Bank of India)"
+                placeholderTextColor={colors.textSecondary}
+              />
+            )}
+          />
+          {errors.bankName && <Text style={styles.error}>{errors.bankName.message}</Text>}
+
+          <Text style={styles.label}>UPI ID (Optional)</Text>
+          <Controller
+            control={control}
+            name="upiId"
+            render={({ field: { onChange, onBlur, value } }) => (
+              <TextInput
+                style={[styles.input, { borderColor: colors.border, color: colors.text, backgroundColor: colors.surfaceVariant }]}
+                onBlur={onBlur}
+                onChangeText={onChange}
+                value={value || ''}
+                placeholder="UPI ID (e.g. name@okaxis)"
+                placeholderTextColor={colors.textSecondary}
+              />
+            )}
+          />
+
+          <Text style={[styles.label, { marginTop: 12 }]}>Account Type</Text>
           <Controller
             control={control}
             name="accountType"
             render={({ field: { onChange, value } }) => (
-              <View style={styles.toggleRow}>
+              <View style={styles.typeRow}>
                 {['SAVINGS', 'CURRENT'].map((type) => (
                   <Pressable
                     key={type}
                     style={[
-                      styles.toggleOption,
-                      { 
-                        backgroundColor: value === type ? colors.secondary : colors.surface,
-                        borderColor: value === type ? colors.secondary : colors.border
-                      }
+                      styles.typeButton,
+                      { borderColor: colors.border },
+                      value === type && { backgroundColor: colors.secondary, borderColor: colors.secondary }
                     ]}
                     onPress={() => onChange(type)}
                   >
                     <Text style={[
-                      typography.bodyMedium, 
-                      { color: value === type ? '#FFFFFF' : colors.text }
+                      typography.bodyMedium,
+                      { color: colors.text },
+                      value === type && { color: colors.onSecondary, fontWeight: '700' }
                     ]}>
-                      {type}
+                      {type} Account
                     </Text>
                   </Pressable>
                 ))}
               </View>
             )}
           />
+        </View>
 
-          <Pressable
-            style={[styles.submitButton, { backgroundColor: colors.secondary, marginTop: spacing.xl }]}
-            onPress={handleSubmit(onSubmit)}
-            disabled={isCreating || isUpdating}
+        {/* Action Button */}
+        <Pressable 
+          style={[styles.submitBtn, { backgroundColor: colors.secondary }]}
+          onPress={handleSubmit(onSubmit)}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator color={colors.onSecondary} />
+          ) : (
+            <Text style={[typography.buttonText, { color: colors.onSecondary }]}>
+              {bank ? 'Update Payout Details' : 'Configure Payout Bank'}
+            </Text>
+          )}
+        </Pressable>
+
+        {bank && (
+          <Pressable 
+            style={[styles.deleteBtn, { borderColor: colors.danger }]}
+            onPress={handleDeleteBank}
+            disabled={deleteBankDetails.isPending}
           >
-            {isCreating || isUpdating ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+            {deleteBankDetails.isPending ? (
+              <ActivityIndicator color={colors.danger} />
             ) : (
-              <Text style={[typography.buttonText, { color: '#FFFFFF' }]}>
-                {existingBank ? 'Save Changes' : 'Link Payout Account'}
-              </Text>
+              <Text style={[typography.buttonText, { color: colors.danger }]}>Remove Payout Bank Details</Text>
             )}
           </Pressable>
-        </View>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  center: {
+  container: { flex: 1 },
+  scroll: { padding: 20, paddingBottom: 40 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  verifiedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
+  },
+  card: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 18,
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  input: {
+    height: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 14,
+  },
+  error: { color: '#EF4444', fontSize: 11, marginTop: 4, fontWeight: '600' },
+  typeRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 6,
+  },
+  typeButton: {
     flex: 1,
+    height: 44,
+    borderRadius: 8,
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  scroll: {
-    padding: 24,
-  },
-  form: {
-    width: '100%',
-  },
-  label: {
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  input: {
+  submitBtn: {
     height: 52,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    paddingHorizontal: 16,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  toggleRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  toggleOption: {
-    flex: 1,
-    height: 48,
+  deleteBtn: {
+    height: 52,
     borderRadius: 12,
     borderWidth: 1.5,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  errorText: {
-    marginTop: 4,
-  },
-  submitButton: {
-    height: 52,
-    borderRadius: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 4,
+    marginTop: 12,
   },
 });

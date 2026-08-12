@@ -1,14 +1,6 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  withTiming, 
-  withSequence, 
-  withDelay,
-  Easing
-} from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useTheme } from '@/hooks/useTheme';
 import * as Haptics from 'expo-haptics';
@@ -19,30 +11,9 @@ export default function BookingSuccessScreen() {
   const params = useLocalSearchParams<{ bookingId: string }>();
   const bookingId = params.bookingId || 'CONF-992381';
 
-  // Animation values
-  const scale = useSharedValue(0.5);
-  const opacity = useSharedValue(0);
-  const checkOffset = useSharedValue(50); // stroke dash offset
-
   useEffect(() => {
-    // Perform success haptics
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    // Run animations
-    scale.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.back(1.5)) });
-    opacity.value = withTiming(1, { duration: 400 });
-    checkOffset.value = withDelay(
-      300,
-      withTiming(0, { duration: 500, easing: Easing.inOut(Easing.ease) })
-    );
   }, []);
-
-  const animatedContainerStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: scale.value }],
-      opacity: opacity.value,
-    };
-  });
 
   const handleTrackBooking = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -55,10 +26,10 @@ export default function BookingSuccessScreen() {
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background, padding: spacing.xl }]}>
+      <View style={[styles.container, { backgroundColor: colors.background, padding: spacing.xl }]}>
       
       {/* Animated Success Icon Card */}
-      <Animated.View style={[styles.animatedBox, animatedContainerStyle]}>
+      <View style={styles.animatedBox}>
         <Svg width={120} height={120} viewBox="0 0 100 100">
           {/* Green Glowing Circle */}
           <Circle 
@@ -78,7 +49,7 @@ export default function BookingSuccessScreen() {
             strokeLinecap="round" 
             strokeLinejoin="round" 
             strokeDasharray={100}
-            strokeDashoffset={checkOffset.value}
+            strokeDashoffset={0}
           />
         </Svg>
 
@@ -88,7 +59,7 @@ export default function BookingSuccessScreen() {
         <Text style={[typography.bodyMedium, { color: colors.textSecondary, marginTop: spacing.sm, textAlign: 'center', lineHeight: 22 }]}>
           Your service booking request has been successfully dispatched to the provider.
         </Text>
-      </Animated.View>
+      </View>
 
       {/* Details Box */}
       <View style={[styles.detailsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>

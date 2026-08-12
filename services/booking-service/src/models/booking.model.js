@@ -63,6 +63,7 @@ const BookingSchema = new mongoose.Schema(
     },
 
     additionalNotes: { type: String, maxLength: 500, trim: true },
+    completionPhotos: { type: [String], default: [] },
     deletedAt: { type: Date, default: null, index: true }
   },
   { timestamps: true, versionKey: false }

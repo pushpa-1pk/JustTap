@@ -8,6 +8,7 @@ const { verifyRole } = require('../middlewares/auth.middleware');
 router.use(authMiddleware);
 router.use(verifyRole(['customer']));
 
+router.get('/history', reviewController.getCustomerReviewsHistory);
 router.post('/', reviewController.createReview);
 router.put('/:id', reviewController.updateReview);
 router.delete('/:id', reviewController.deleteReview);

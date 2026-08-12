@@ -13,7 +13,30 @@ const axiosBaseQuery = (): BaseQueryFn<
   },
   unknown,
   unknown
-> => async ({ url, method = 'GET', data, params, headers }) => {
+> => async ({ url, method = 'GET', data, params, headers }, api) => {
+  // If we are operating in demo mode, intercept real endpoints to prevent unauthorized 401 logouts
+  const state = api.getState() as any;
+  const isDemo = Boolean(state?.auth?.user?.id?.startsWith('demo-') || state?.auth?.accessToken?.startsWith('demo-'));
+
+  if (isDemo) {
+    console.warn(`[RTK Query Demo Interceptor] Bypassing backend request for: ${url}`);
+    
+    // Return structured empty/success mock data for each endpoint category
+    if (url.startsWith('/bookings')) {
+      return { data: { success: true, data: [] } };
+    }
+    if (url.startsWith('/profiles') || url.startsWith('/addresses')) {
+      return { data: { success: true, data: { profile: null, addresses: [] } } };
+    }
+    if (url.startsWith('/categories') || url.startsWith('/services')) {
+      return { data: { success: true, data: [] } };
+    }
+    if (url.startsWith('/search/providers-matching')) {
+      return { data: { success: true, data: { providers: [] } } };
+    }
+    return { data: { success: true, data: {} } };
+  }
+
   try {
     const result = await apiClient({
       url,
@@ -37,6 +60,6 @@ const axiosBaseQuery = (): BaseQueryFn<
 export const baseApi = createApi({
   reducerPath: 'api',
   baseQuery: axiosBaseQuery(),
-  tagTypes: ['User', 'Profile', 'Addresses', 'Categories', 'Services', 'ProviderServices', 'Bookings', 'Matching'],
+  tagTypes: ['User', 'Profile', 'Addresses', 'BankDetails', 'Categories', 'Services', 'ProviderServices', 'Bookings', 'Matching'],
   endpoints: () => ({}),
 });

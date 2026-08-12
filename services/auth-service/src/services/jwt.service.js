@@ -72,6 +72,7 @@ class JwtService {
       userId: user._id.toString(),
       phone: user.phone,
       role: user.role,
+      roles: Array.isArray(user.roles) && user.roles.length > 0 ? user.roles : [user.role],
       tokenVersion: user.tokenVersion,
       type,
       jti: overrides.jti || randomUUID(),

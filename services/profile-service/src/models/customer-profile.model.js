@@ -57,6 +57,11 @@ const customerProfileSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
+    emergencyContact: {
+      name: { type: String, default: "" },
+      phone: { type: String, default: "" },
+      relationship: { type: String, default: "" }
+    },
   },
   {
     timestamps: true,
@@ -72,6 +77,7 @@ customerProfileSchema.methods.calculateCompletion = function calculateCompletion
     Boolean(this.dateOfBirth),
     Boolean(this.language),
     Boolean(this.profileImage),
+    Boolean(this.emergencyContact && this.emergencyContact.name && this.emergencyContact.phone)
   ];
 
   return Math.round(

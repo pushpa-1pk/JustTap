@@ -37,7 +37,7 @@ exports.updateReview = async (req, res, next) => {
 exports.deleteReview = async (req, res, next) => {
   try {
     const customerId = req.user.id;
-    const result = await reviewService.deleteReviewRecord(customerId, req.params.id);
+    await reviewService.deleteReviewRecord(customerId, req.params.id);
     return res.status(200).json({ success: true, message: 'Review successfully removed.' });
   } catch (error) {
     next(error);
@@ -75,6 +75,19 @@ exports.getProviderSummaryScores = async (req, res, next) => {
     }
     
     return res.status(200).json({ success: true, data: summary });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getCustomerReviewsHistory = async (req, res, next) => {
+  try {
+    const customerId = req.user.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const data = await reviewRepository.getPaginatedReviewsByCustomer(customerId, page, limit);
+    return res.status(200).json({ success: true, ...data });
   } catch (error) {
     next(error);
   }

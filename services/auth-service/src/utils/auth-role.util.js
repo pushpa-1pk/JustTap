@@ -21,20 +21,31 @@ const resolveSignupRole = (role) => {
   return role;
 };
 
-const assertExistingUserRole = (user, requestedRole) => {
+const getUserRoles = (user) => {
+  const roles = Array.isArray(user.roles) && user.roles.length > 0
+    ? user.roles
+    : [user.role];
+
+  return [...new Set(roles.filter(Boolean))];
+};
+
+const resolveExistingUserRole = (user, requestedRole) => {
+  const userRoles = getUserRoles(user);
+
   if (!requestedRole) {
-    return;
+    return user.role || userRoles[0] || USER_ROLES.CUSTOMER;
   }
 
-  if (user.role !== requestedRole) {
-    throw new Error(
-      `This phone number is already registered as ${user.role}.`
-    );
+  if (!SIGNUP_ROLES.includes(requestedRole)) {
+    throw new Error("Invalid login role.");
   }
+
+  return requestedRole;
 };
 
 module.exports = {
   getAllowedSignupRoles,
   resolveSignupRole,
-  assertExistingUserRole,
+  getUserRoles,
+  resolveExistingUserRole,
 };

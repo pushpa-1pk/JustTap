@@ -2,7 +2,6 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const mongoSanitize = require('express-mongo-sanitize');
 
 const config = require('./config/env');
 const customerRoutes = require('./routes/customer.routes');
@@ -12,6 +11,22 @@ const errorMiddleware = require('./middlewares/error.middleware');
 const ApiError = require('./utils/apiError');
 
 const app = express();
+
+const sanitizeNoSqlPayload = (value) => {
+  if (Array.isArray(value)) {
+    return value.map(sanitizeNoSqlPayload);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  return Object.entries(value).reduce((acc, [key, nestedValue]) => {
+    const sanitizedKey = key.replace(/\$/g, '').replace(/\./g, '');
+    acc[sanitizedKey] = sanitizeNoSqlPayload(nestedValue);
+    return acc;
+  }, {});
+};
 
 // 1. Production Hardening Layer (HTTP Headers Configuration)
 app.use(helmet());
@@ -26,7 +41,11 @@ app.use(cors({
 // 3. Request Preprocessing & Anti-Injection Sanitizers
 app.use(express.json({ limit: '10kb' })); // Mitigate Large JSON payload DOS attacks
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
-app.use(mongoSanitize()); // Deep sanitization against NoSQL object injection properties
+app.use((req, res, next) => {
+  req.body = sanitizeNoSqlPayload(req.body);
+  req.params = sanitizeNoSqlPayload(req.params);
+  next();
+});
 
 // 4. Ingress Rate Limiter (Protects REST APIs from scraping/flooding)
 const standardApiLimiter = rateLimit({

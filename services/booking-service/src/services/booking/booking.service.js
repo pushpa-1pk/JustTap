@@ -28,9 +28,9 @@ class BookingService {
     });
   }
 
-  async verifyServiceHandshake(bookingId, rawOtp, purpose, actor) {
+  async verifyServiceHandshake(bookingId, rawOtp, purpose, actor, completionPhotos = []) {
     return withTransaction(async (session) => {
-      return this.statusService.verifyHandshake(bookingId, rawOtp, purpose, actor, session);
+      return this.statusService.verifyHandshake(bookingId, rawOtp, purpose, actor, completionPhotos, session);
     });
   }
 

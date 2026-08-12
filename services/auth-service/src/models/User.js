@@ -23,6 +23,11 @@ const userSchema = new Schema(
       enum: Object.values(USER_ROLES),
       default: USER_ROLES.CUSTOMER,
     },
+    roles: {
+      type: [String],
+      enum: Object.values(USER_ROLES),
+      default: [USER_ROLES.CUSTOMER],
+    },
     isPhoneVerified: {
       type: Boolean,
       default: false,

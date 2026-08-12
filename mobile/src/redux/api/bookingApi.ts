@@ -36,11 +36,19 @@ type RawBooking = {
       coordinates: [number, number];
     };
   };
+  customerSnapshot?: {
+    fullName: string;
+    phone: string;
+  };
   providerSnapshot?: {
     businessName?: string | null;
     phone?: string | null;
   };
+  serviceDetails?: {
+    name: string;
+  };
   additionalNotes?: string;
+  completionPhotos?: string[];
   paymentStatus: 'PENDING' | 'PAID' | 'REFUNDED' | 'FAILED';
   createdAt: string;
   updatedAt: string;
@@ -75,8 +83,16 @@ export interface Booking {
     finalAmount: number;
   };
   customerAddressSnapshot: RawBooking['customerAddressSnapshot'];
+  customerSnapshot?: {
+    fullName: string;
+    phone: string;
+  };
   providerSnapshot?: RawBooking['providerSnapshot'];
+  serviceDetails?: {
+    name: string;
+  };
   additionalNotes?: string;
+  completionPhotos?: string[];
   paymentStatus: 'PENDING' | 'PAID' | 'REFUNDED' | 'FAILED';
   createdAt: string;
   updatedAt: string;
@@ -107,8 +123,11 @@ const normalizeBooking = (booking: RawBooking): Booking => ({
     finalAmount: booking.priceSnapshot?.finalAmount ?? booking.snapshotPricing?.totalAmountToPay ?? 0,
   },
   customerAddressSnapshot: booking.customerAddressSnapshot,
+  customerSnapshot: booking.customerSnapshot,
   providerSnapshot: booking.providerSnapshot,
+  serviceDetails: booking.serviceDetails,
   additionalNotes: booking.additionalNotes,
+  completionPhotos: booking.completionPhotos,
   paymentStatus: booking.paymentStatus,
   createdAt: booking.createdAt,
   updatedAt: booking.updatedAt,
@@ -236,7 +255,7 @@ export const bookingApi = baseApi.injectEndpoints({
       }),
       invalidatesTags: (result, error, { id }) => ['Bookings', { type: 'Bookings', id }],
     }),
-    verifyBookingHandshake: builder.mutation<{ success: boolean; message: string; data: Booking }, { id: string; rawOtp: string; purpose: 'START_SERVICE' | 'COMPLETE_SERVICE' }>({
+    verifyBookingHandshake: builder.mutation<{ success: boolean; message: string; data: Booking }, { id: string; rawOtp: string; purpose: 'START_SERVICE' | 'COMPLETE_SERVICE'; completionPhotos?: string[] }>({
       query: ({ id, ...body }) => ({
         url: `/bookings/provider/${id}/verify-handshake`,
         method: 'POST',

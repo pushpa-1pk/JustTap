@@ -30,9 +30,33 @@ export const normalizeUserRole = (role: string | null | undefined): AppUserRole 
   return 'CUSTOMER';
 };
 
+export const normalizeUserRoles = (
+  roles: Array<string | null | undefined> | string | null | undefined,
+  fallbackRole?: string | null
+): AppUserRole[] => {
+  const roleList = Array.isArray(roles) ? roles : roles ? [roles] : [];
+  const normalizedRoles = roleList.map(normalizeUserRole);
+  const fallback = normalizeUserRole(fallbackRole);
+  const uniqueRoles = Array.from(new Set([...normalizedRoles, fallback]));
+
+  return uniqueRoles.length > 0 ? uniqueRoles : ['CUSTOMER'];
+};
+
 export const normalizeProfileCompletion = (value: {
   isProfileComplete?: boolean;
   profileCompleted?: boolean;
 } | null | undefined): boolean => {
   return Boolean(value?.isProfileComplete ?? value?.profileCompleted ?? false);
+};
+
+export const getDefaultRouteForRole = (role: AppUserRole) => {
+  if (role === 'PROVIDER') {
+    return '/(provider)/(tabs)/dashboard' as const;
+  }
+
+  if (role === 'ADMIN') {
+    return '/(admin)/dashboard' as const;
+  }
+
+  return '/(customer)/(tabs)/home' as const;
 };

@@ -7,6 +7,8 @@ export interface CustomerProfile {
   dateOfBirth: string;
   email: string;
   language: string;
+  profileImage?: string;
+  profileCompletion?: number;
 }
 
 export interface ProviderProfile {
@@ -22,7 +24,15 @@ export interface ProviderProfile {
   };
   bio: string;
   isOnline?: boolean;
-  approvalStatus?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  verificationStatus?: 'pending' | 'under_review' | 'approved' | 'rejected';
+  profileCompletion?: number;
+  rating?: number;
+  totalJobs?: number;
+  // Persisted as GeoJSON; latitude/longitude above are the flat wire format.
+  currentLocation?: {
+    type: 'Point';
+    coordinates: [number, number];
+  };
 }
 
 export interface Address {
@@ -41,11 +51,15 @@ export interface Address {
 }
 
 export interface BankDetails {
+  id?: string;
   accountHolderName: string;
-  accountNumber: string;
+  // Write-only: sent on create/update, never returned by the API.
+  accountNumber?: string;
+  accountNumberMasked?: string;
   ifscCode: string;
   bankName: string;
   accountType: 'SAVINGS' | 'CURRENT';
+  verified?: boolean;
 }
 
 export const profileApi = baseApi.injectEndpoints({
@@ -61,7 +75,8 @@ export const profileApi = baseApi.injectEndpoints({
         method: 'POST',
         data: body,
       }),
-      invalidatesTags: ['Profile'],
+      // 'User' because the profile service mirrors completion back to auth-service.
+      invalidatesTags: ['Profile', 'User'],
     }),
     updateCustomerProfile: builder.mutation<{ success: boolean; data: CustomerProfile }, Partial<CustomerProfile>>({
       query: (body) => ({
@@ -69,7 +84,7 @@ export const profileApi = baseApi.injectEndpoints({
         method: 'PUT',
         data: body,
       }),
-      invalidatesTags: ['Profile'],
+      invalidatesTags: ['Profile', 'User'],
     }),
     getCustomerProfileWithAddresses: builder.query<{ success: boolean; data: { profile: CustomerProfile; addresses: Address[] } }, void>({
       query: () => ({ url: '/profiles/customer/with-addresses', method: 'GET' }),
@@ -87,15 +102,20 @@ export const profileApi = baseApi.injectEndpoints({
         method: 'POST',
         data: body,
       }),
-      invalidatesTags: ['Profile'],
+      invalidatesTags: ['Profile', 'User'],
     }),
-    updateProviderProfile: builder.mutation<{ success: boolean; data: ProviderProfile }, Partial<ProviderProfile>>({
+    // latitude/longitude must be sent together or not at all — the server maps
+    // the pair onto currentLocation and rejects a lone coordinate.
+    updateProviderProfile: builder.mutation<
+      { success: boolean; data: ProviderProfile },
+      Partial<Omit<ProviderProfile, 'currentLocation'>>
+    >({
       query: (body) => ({
         url: '/profiles/provider',
         method: 'PUT',
         data: body,
       }),
-      invalidatesTags: ['Profile'],
+      invalidatesTags: ['Profile', 'User'],
     }),
     updateProviderLocation: builder.mutation<{ success: boolean; message: string }, { latitude: number; longitude: number }>({
       query: (body) => ({
@@ -160,6 +180,7 @@ export const profileApi = baseApi.injectEndpoints({
     // Bank Details
     getBankDetails: builder.query<{ success: boolean; data: BankDetails }, void>({
       query: () => ({ url: '/bank-details', method: 'GET' }),
+      providesTags: ['BankDetails'],
     }),
     createBankDetails: builder.mutation<{ success: boolean; data: BankDetails }, BankDetails>({
       query: (body) => ({
@@ -167,6 +188,7 @@ export const profileApi = baseApi.injectEndpoints({
         method: 'POST',
         data: body,
       }),
+      invalidatesTags: ['BankDetails'],
     }),
     updateBankDetails: builder.mutation<{ success: boolean; data: BankDetails }, Partial<BankDetails>>({
       query: (body) => ({
@@ -174,6 +196,7 @@ export const profileApi = baseApi.injectEndpoints({
         method: 'PUT',
         data: body,
       }),
+      invalidatesTags: ['BankDetails'],
     }),
   }),
   overrideExisting: false,

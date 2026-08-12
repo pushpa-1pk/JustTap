@@ -22,6 +22,15 @@ export default function CustomerLayout() {
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
+      <Stack.Screen name="wallet" options={{ headerShown: false }} />
+      <Stack.Screen name="addresses" options={{ headerShown: false }} />
+      <Stack.Screen name="payment-methods" options={{ headerShown: false }} />
+      <Stack.Screen name="coupons" options={{ headerShown: false }} />
+      <Stack.Screen name="referrals" options={{ headerShown: false }} />
+      <Stack.Screen name="reviews" options={{ headerShown: false }} />
+      <Stack.Screen name="support" options={{ headerShown: false }} />
+      <Stack.Screen name="settings" options={{ headerShown: false }} />
       <Stack.Screen name="provider-details" options={{ title: 'Provider Details' }} />
       <Stack.Screen name="book-service" options={{ title: 'Confirm Booking' }} />
       <Stack.Screen name="booking-success" options={{ headerShown: false }} />

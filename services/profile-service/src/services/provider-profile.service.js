@@ -3,7 +3,11 @@ const providerProfileRepository = require("../repositories/provider-profile.repo
 const documentRepository = require("../repositories/document.repository");
 const bankDetailsRepository = require("../repositories/bank-details.repository");
 const approvalRequestRepository = require("../repositories/approval-request.repository");
+const authClientService = require("./auth-client.service");
 const logger = require("./logger.service");
+const {
+  PROFILE_COMPLETE_THRESHOLD,
+} = require("../constants/profile.constants");
 
 class ProviderProfileService {
   async createProfile(userId, data) {
@@ -34,6 +38,11 @@ class ProviderProfileService {
       profile.profileCompletion = completion;
       await profile.save();
 
+      await authClientService.updateProfileStatus(
+        userId,
+        completion >= PROFILE_COMPLETE_THRESHOLD
+      );
+
       logger.info("PROVIDER_PROFILE_CREATED", { userId });
       return profile;
     } catch (error) {
@@ -63,7 +72,19 @@ class ProviderProfileService {
 
   async updateProfile(userId, data) {
     try {
-      const profile = await providerProfileRepository.update(userId, data);
+      const payload = { ...data };
+
+      if (payload.latitude !== undefined && payload.longitude !== undefined) {
+        payload.currentLocation = {
+          type: "Point",
+          coordinates: [payload.longitude, payload.latitude],
+        };
+      }
+
+      delete payload.latitude;
+      delete payload.longitude;
+
+      const profile = await providerProfileRepository.update(userId, payload);
       if (!profile) {
         throw new ApiError(404, "Profile not found");
       }
@@ -71,6 +92,11 @@ class ProviderProfileService {
       const completion = profile.calculateCompletion();
       profile.profileCompletion = completion;
       await profile.save();
+
+      await authClientService.updateProfileStatus(
+        userId,
+        completion >= PROFILE_COMPLETE_THRESHOLD
+      );
 
       logger.info("PROVIDER_PROFILE_UPDATED", { userId });
       return profile;

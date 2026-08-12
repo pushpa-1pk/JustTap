@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, Text, View, Pressable, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useDispatch } from 'react-redux';
 import { useForm, Controller } from 'react-hook-form';
@@ -9,7 +9,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useVerifyOtpMutation, useSendOtpMutation } from '@/redux/api/authApi';
 import { setCredentials } from '@/redux/slices/authSlice';
 import { secureStore } from '@/utils/secureStore';
-import { getAuthPlatform } from '@/utils/auth';
+import { AppUserRole, getAuthPlatform, getDefaultRouteForRole } from '@/utils/auth';
 import * as Haptics from 'expo-haptics';
 
 // Validation Schema for 6-digit OTP
@@ -21,16 +21,33 @@ const otpSchema = z.object({
 
 type FormData = z.infer<typeof otpSchema>;
 
+type PendingSession = {
+  accessToken: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    phone: string;
+    role: AppUserRole;
+    roles: AppUserRole[];
+    accountStatus: 'ACTIVE' | 'BLOCKED' | 'SUSPENDED' | 'DELETED';
+    isProfileComplete: boolean;
+  };
+};
+
 export default function OtpScreen() {
   const { colors, typography, spacing, border } = useTheme();
   const router = useRouter();
   const dispatch = useDispatch();
   const params = useLocalSearchParams<{ phone: string }>();
-  const phone = params.phone || '9999999999';
+  const phone = params.phone || '';
 
-  // API Mutations
-  const [verifyOtp, { isLoading: isVerifying }] = useVerifyOtpMutation();
   const [sendOtp, { isLoading: isResending }] = useSendOtpMutation();
+  const [verifyOtp, { isLoading: isVerifying }] = useVerifyOtpMutation();
+
+  const [showRolePicker, setShowRolePicker] = useState(false);
+  const [pendingSession, setPendingSession] = useState<PendingSession | null>(null);
+  const [pendingOtp, setPendingOtp] = useState('');
+  const [isCompletingRole, setIsCompletingRole] = useState(false);
   
   // Timer for OTP resend (60 seconds)
   const [timer, setTimer] = useState(60);
@@ -55,70 +72,108 @@ export default function OtpScreen() {
       await sendOtp({ phone }).unwrap();
       setTimer(60);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (err) {
+      Alert.alert('Success', 'Verification code has been resent to your mobile number.');
+    } catch (err: any) {
       console.error('Resend OTP failed:', err);
+      Alert.alert('Error', err?.data?.message || err?.message || 'Failed to resend OTP. Please try again.');
     }
   };
 
-  const onSubmit = async (data: FormData) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    try {
-      // For general login, we default request as customer role, 
-      // but the backend will return the correct user role if already registered.
-      const response = await verifyOtp({
-        phone,
-        otp: data.otp,
-        role: 'customer',
-        deviceId: 'mobile-app-client',
-        deviceName: Platform.OS === 'ios' ? 'iOS Device' : 'Android Device',
-        platform: getAuthPlatform(),
-        appVersion: '1.0.0',
-      }).unwrap();
+  const openRolePicker = () => {
+    setShowRolePicker(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
 
-      if (response.success && response.data) {
-        const { accessToken, refreshToken, user: authUser } = response.data;
-        
-        // 1. Store tokens securely
-        await secureStore.saveTokens(accessToken, refreshToken);
-        await secureStore.saveRole(authUser.role);
+  const handleRoleSelect = async (role: AppUserRole) => {
+    setIsCompletingRole(true);
 
-        // 2. Set credentials in Redux
-        dispatch(
-          setCredentials({
+    if (!pendingSession) {
+      try {
+        const response = await verifyOtp({
+          phone,
+          otp: pendingOtp,
+          role: role.toLowerCase() as 'customer' | 'provider' | 'admin',
+          deviceId: 'mobile-app-client',
+          deviceName: Platform.OS === 'ios' ? 'iOS Device' : 'Android Device',
+          platform: getAuthPlatform(),
+          appVersion: '1.0.0',
+        }).unwrap();
+
+        if (response.success && response.data) {
+          const { accessToken, refreshToken, user: authUser } = response.data;
+          const session = {
+            accessToken,
+            refreshToken,
             user: {
               id: authUser.id,
               phone: authUser.phone,
               role: authUser.role,
+              roles: Array.from(new Set([...(authUser.roles || []), role])),
               accountStatus: authUser.accountStatus,
               isProfileComplete: authUser.isProfileComplete || false,
             },
-            accessToken,
-          })
-        );
-
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        // 3. Role-based redirect or Profile completion redirect
-        const isNewUser = response.data.isNewUser || !authUser.isProfileComplete;
-        if (isNewUser) {
-          router.replace('/(auth)/register');
-        } else {
-          // Direct redirect based on user role
-          if (authUser.role === 'CUSTOMER') {
-            router.replace('/(customer)/(tabs)/home');
-          } else if (authUser.role === 'PROVIDER') {
-            router.replace('/(provider)/(tabs)/dashboard');
-          } else if (authUser.role === 'ADMIN') {
-            router.replace('/(admin)/dashboard');
-          } else {
-            router.replace('/(auth)/login');
-          }
+          };
+          setPendingSession(session);
+          await finishRoleLogin(role, session);
+          setIsCompletingRole(false);
+          return;
         }
+      } catch (error: any) {
+        console.warn('Verify OTP error:', error);
+        if (error && (typeof error.status === 'number' || error.status === 400 || error.status === 401)) {
+          Alert.alert(
+            'Verification Failed',
+            error.data?.message || 'The verification code you entered is incorrect. Please check and try again.'
+          );
+          setIsCompletingRole(false);
+          setShowRolePicker(false);
+          return;
+        }
+        setIsCompletingRole(false);
+        return;
       }
-    } catch (err: any) {
-      console.error('Verify OTP failed:', err);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
+
+    if (pendingSession) {
+      await finishRoleLogin(role, pendingSession);
+    }
+    setIsCompletingRole(false);
+  };
+
+  const finishRoleLogin = async (role: AppUserRole, session: PendingSession) => {
+    if (!session) return;
+
+    const roles = Array.from(new Set([...session.user.roles, role]));
+    const selectedUser = {
+      ...session.user,
+      role,
+      roles,
+    };
+
+    await secureStore.saveTokens(session.accessToken, session.refreshToken);
+    await secureStore.saveRole(role);
+
+    dispatch(
+      setCredentials({
+        user: selectedUser,
+        accessToken: session.accessToken,
+      })
+    );
+
+    setShowRolePicker(false);
+
+    if (!selectedUser.isProfileComplete) {
+      router.replace(role === 'PROVIDER' ? '/(provider)/(tabs)/profile' : '/(customer)/(tabs)/profile');
+      return;
+    }
+
+    router.replace(getDefaultRouteForRole(role));
+  };
+
+  const onSubmit = async (data: FormData) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setPendingOtp(data.otp);
+    openRolePicker();
   };
 
   return (
@@ -207,6 +262,39 @@ export default function OtpScreen() {
             )}
           </Pressable>
         </View>
+
+        {showRolePicker && (
+          <View style={styles.roleOverlay}>
+            <View style={[styles.roleSheet, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[typography.h2, { color: colors.text, textAlign: 'center' }]}>Choose Role</Text>
+              <Text style={[typography.bodyMedium, { color: colors.textSecondary, textAlign: 'center', marginTop: spacing.xs }]}>
+                Select how you want to use JustTap right now.
+              </Text>
+
+              <Pressable
+                style={[styles.roleCard, { backgroundColor: colors.primary + '25', borderColor: colors.primary }]}
+                onPress={() => handleRoleSelect('CUSTOMER')}
+                disabled={isCompletingRole}
+              >
+                <Text style={[typography.h3, { color: colors.text }]}>Customer</Text>
+                <Text style={[typography.bodyMedium, { color: colors.textSecondary, marginTop: 4 }]}>
+                  Book services, search providers, track bookings, and manage your profile.
+                </Text>
+              </Pressable>
+
+              <Pressable
+                style={[styles.roleCard, { backgroundColor: colors.secondary + '20', borderColor: colors.secondary }]}
+                onPress={() => handleRoleSelect('PROVIDER')}
+                disabled={isCompletingRole}
+              >
+                <Text style={[typography.h3, { color: colors.text }]}>Provider</Text>
+                <Text style={[typography.bodyMedium, { color: colors.textSecondary, marginTop: 4 }]}>
+                  Manage jobs, messages, earnings, services, and provider profile.
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -248,5 +336,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 4,
+  },
+  roleOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  roleSheet: {
+    borderWidth: 1.5,
+    borderRadius: 20,
+    padding: 20,
+  },
+  roleCard: {
+    borderWidth: 1.5,
+    borderRadius: 16,
+    padding: 18,
+    marginTop: 14,
   },
 });

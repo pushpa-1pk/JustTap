@@ -13,14 +13,18 @@ class AddressService {
         await addressRepository.updateMany({ userId }, { isPrimary: false });
       }
 
+      const payload = { ...data };
+      delete payload.latitude;
+      delete payload.longitude;
+
       const address = await addressRepository.create({
+        ...payload,
         userId,
         isPrimary,
         location: {
           type: "Point",
           coordinates: [data.longitude, data.latitude],
         },
-        ...data,
       });
 
       logger.info("ADDRESS_CREATED", { userId, addressId: address._id });

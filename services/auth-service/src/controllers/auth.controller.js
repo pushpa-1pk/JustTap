@@ -65,6 +65,28 @@ const logoutAll = asyncHandler(async (req, res) => {
   );
 });
 
+const deleteAccount = asyncHandler(async (req, res) => {
+  const result = await authService.deleteUserAccount(req.user._id);
+  return res.status(200).json(
+    new ApiResponse(200, "Account deleted successfully", result)
+  );
+});
+
+const becomeProvider = asyncHandler(async (req, res) => {
+  const result = await authService.becomeProvider(req.user._id);
+  return res.status(200).json(
+    new ApiResponse(200, "Upgraded to provider role successfully", result)
+  );
+});
+
+const switchRole = asyncHandler(async (req, res) => {
+  const { role } = req.body;
+  const result = await authService.switchRole(req.user._id, role);
+  return res.status(200).json(
+    new ApiResponse(200, "Active role switched successfully", result)
+  );
+});
+
 module.exports = {
   sendOtp,
   verifyOtp,
@@ -72,4 +94,7 @@ module.exports = {
   getMe,
   logout,
   logoutAll,
+  deleteAccount,
+  becomeProvider,
+  switchRole,
 };

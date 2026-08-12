@@ -1,14 +1,38 @@
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 const KEY_ACCESS_TOKEN = 'justtap_access_token';
 const KEY_REFRESH_TOKEN = 'justtap_refresh_token';
 const KEY_USER_ROLE = 'justtap_user_role';
 
+const isWeb = Platform.OS === 'web';
+
+const browserStore = {
+  async setItemAsync(key: string, value: string): Promise<void> {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem(key, value);
+    }
+  },
+  async getItemAsync(key: string): Promise<string | null> {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem(key);
+    }
+    return null;
+  },
+  async deleteItemAsync(key: string): Promise<void> {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem(key);
+    }
+  },
+};
+
+const storage = isWeb ? browserStore : SecureStore;
+
 export const secureStore = {
   async saveTokens(accessToken: string, refreshToken: string): Promise<void> {
     try {
-      await SecureStore.setItemAsync(KEY_ACCESS_TOKEN, accessToken);
-      await SecureStore.setItemAsync(KEY_REFRESH_TOKEN, refreshToken);
+      await storage.setItemAsync(KEY_ACCESS_TOKEN, accessToken);
+      await storage.setItemAsync(KEY_REFRESH_TOKEN, refreshToken);
     } catch (error) {
       console.error('Failed to save secure tokens:', error);
     }
@@ -16,7 +40,7 @@ export const secureStore = {
 
   async getAccessToken(): Promise<string | null> {
     try {
-      return await SecureStore.getItemAsync(KEY_ACCESS_TOKEN);
+      return await storage.getItemAsync(KEY_ACCESS_TOKEN);
     } catch (error) {
       console.error('Failed to retrieve access token:', error);
       return null;
@@ -25,7 +49,7 @@ export const secureStore = {
 
   async getRefreshToken(): Promise<string | null> {
     try {
-      return await SecureStore.getItemAsync(KEY_REFRESH_TOKEN);
+      return await storage.getItemAsync(KEY_REFRESH_TOKEN);
     } catch (error) {
       console.error('Failed to retrieve refresh token:', error);
       return null;
@@ -34,7 +58,7 @@ export const secureStore = {
 
   async saveRole(role: string): Promise<void> {
     try {
-      await SecureStore.setItemAsync(KEY_USER_ROLE, role);
+      await storage.setItemAsync(KEY_USER_ROLE, role);
     } catch (error) {
       console.error('Failed to save secure role:', error);
     }
@@ -42,7 +66,7 @@ export const secureStore = {
 
   async getRole(): Promise<string | null> {
     try {
-      return await SecureStore.getItemAsync(KEY_USER_ROLE);
+      return await storage.getItemAsync(KEY_USER_ROLE);
     } catch (error) {
       console.error('Failed to retrieve secure role:', error);
       return null;
@@ -51,9 +75,9 @@ export const secureStore = {
 
   async clearAll(): Promise<void> {
     try {
-      await SecureStore.deleteItemAsync(KEY_ACCESS_TOKEN);
-      await SecureStore.deleteItemAsync(KEY_REFRESH_TOKEN);
-      await SecureStore.deleteItemAsync(KEY_USER_ROLE);
+      await storage.deleteItemAsync(KEY_ACCESS_TOKEN);
+      await storage.deleteItemAsync(KEY_REFRESH_TOKEN);
+      await storage.deleteItemAsync(KEY_USER_ROLE);
     } catch (error) {
       console.error('Failed to clear secure storage:', error);
     }

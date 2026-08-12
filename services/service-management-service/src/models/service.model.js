@@ -20,11 +20,38 @@ const serviceSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
+    icon: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     description: {
       type: String,
       trim: true,
       default: "",
       maxlength: 1000,
+    },
+    pricing: {
+      type: {
+        type: String,
+        enum: ["FIXED", "BASE_PLUS_VARIABLE"],
+        default: "BASE_PLUS_VARIABLE",
+      },
+      basePrice: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
+      unit: {
+        type: String,
+        enum: ["HOUR", "SERVICE", "FLAT"],
+        default: "HOUR",
+      },
+      additionalUnitPrice: {
+        type: Number,
+        min: 0,
+        default: 0,
+      },
     },
     estimatedDuration: {
       type: Number,
@@ -36,6 +63,11 @@ const serviceSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    sortOrder: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     isPopular: {
       type: Boolean,
       default: false,
@@ -45,6 +77,16 @@ const serviceSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
       index: true,
+    },
+    createdBy: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+    updatedBy: {
+      type: String,
+      trim: true,
+      default: null,
     },
   },
   {

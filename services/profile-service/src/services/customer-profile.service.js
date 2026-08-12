@@ -1,7 +1,11 @@
 const ApiError = require("../utils/ApiError");
 const customerProfileRepository = require("../repositories/customer-profile.repository");
 const addressRepository = require("../repositories/address.repository");
+const authClientService = require("./auth-client.service");
 const logger = require("./logger.service");
+const {
+  PROFILE_COMPLETE_THRESHOLD,
+} = require("../constants/profile.constants");
 
 class CustomerProfileService {
   async createProfile(userId, data) {
@@ -19,6 +23,11 @@ class CustomerProfileService {
       const completion = profile.calculateCompletion();
       profile.profileCompletion = completion;
       await profile.save();
+
+      await authClientService.updateProfileStatus(
+        userId,
+        completion >= PROFILE_COMPLETE_THRESHOLD
+      );
 
       logger.info("CUSTOMER_PROFILE_CREATED", { userId });
       return profile;
@@ -58,6 +67,11 @@ class CustomerProfileService {
       profile.profileCompletion = completion;
       await profile.save();
 
+      await authClientService.updateProfileStatus(
+        userId,
+        completion >= PROFILE_COMPLETE_THRESHOLD
+      );
+
       logger.info("CUSTOMER_PROFILE_UPDATED", { userId });
       return profile;
     } catch (error) {
@@ -78,7 +92,7 @@ class CustomerProfileService {
 
       const addresses = await addressRepository.findByUserId(userId);
       return {
-        ...profile.toObject(),
+        profile: profile.toObject(),
         addresses,
       };
     } catch (error) {

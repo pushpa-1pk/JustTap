@@ -49,4 +49,10 @@ router.post(
 
 router.post("/logout-all", authenticate, authController.logoutAll);
 
+router.post("/delete-account", authenticate, authController.deleteAccount);
+
+router.post("/become-provider", authenticate, authController.becomeProvider);
+
+router.post("/switch-role", authenticate, authController.switchRole);
+
 module.exports = router;

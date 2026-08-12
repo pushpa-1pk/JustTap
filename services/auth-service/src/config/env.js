@@ -74,6 +74,10 @@ const env = {
   REFRESH_TOKEN_EXPIRES: getString("REFRESH_TOKEN_EXPIRES", "30d"),
   JSON_BODY_LIMIT: getString("JSON_BODY_LIMIT", "100kb"),
   ALLOWED_ORIGINS: getList("ALLOWED_ORIGINS"),
+  INTERNAL_API_KEY: getString(
+    "INTERNAL_API_KEY",
+    NODE_ENV === "production" ? "" : "justtap-internal-dev-key"
+  ),
   SEND_OTP_RATE_LIMIT_WINDOW_MS: getNumber(
     "SEND_OTP_RATE_LIMIT_WINDOW_MS",
     15 * 60 * 1000
@@ -103,6 +107,12 @@ const env = {
   TWILIO_FROM_NUMBER: getString("TWILIO_FROM_NUMBER"),
   LOG_LEVEL: getString("LOG_LEVEL", "info"),
 };
+
+if (env.IS_PRODUCTION && !env.INTERNAL_API_KEY) {
+  throw new Error(
+    "Missing required environment variable: INTERNAL_API_KEY"
+  );
+}
 
 if (env.IS_PRODUCTION && env.SMS_PROVIDER === "mock") {
   throw new Error(

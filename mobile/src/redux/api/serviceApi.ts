@@ -41,11 +41,42 @@ export interface ProviderSearchDetails {
   providerServiceId: string;
 }
 
+type ListPayload<T> =
+  | T[]
+  | {
+      items?: T[];
+      docs?: T[];
+      total?: number;
+      page?: number;
+      pages?: number;
+      limit?: number;
+    };
+
+const normalizeListPayload = <T>(payload: ListPayload<T> | undefined): T[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (payload?.items && Array.isArray(payload.items)) {
+    return payload.items;
+  }
+
+  if (payload?.docs && Array.isArray(payload.docs)) {
+    return payload.docs;
+  }
+
+  return [];
+};
+
 export const serviceApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     // Categories Public Catalog
     getCategories: builder.query<{ success: boolean; data: Category[] }, void>({
       query: () => ({ url: '/categories', method: 'GET' }),
+      transformResponse: (response: { success: boolean; data: ListPayload<Category> }) => ({
+        ...response,
+        data: normalizeListPayload(response.data),
+      }),
       providesTags: ['Categories'],
     }),
 
@@ -55,6 +86,10 @@ export const serviceApi = baseApi.injectEndpoints({
         url: '/services',
         method: 'GET',
         params: params || undefined,
+      }),
+      transformResponse: (response: { success: boolean; data: ListPayload<ServiceItem> }) => ({
+        ...response,
+        data: normalizeListPayload(response.data),
       }),
       providesTags: ['Services'],
     }),

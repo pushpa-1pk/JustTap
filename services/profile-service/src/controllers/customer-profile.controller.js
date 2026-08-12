@@ -71,6 +71,20 @@ class CustomerProfileController {
     const profile = await customerProfileService.getProfileWithAddresses(req.user.id);
     res.status(200).json(new ApiResponse(200, "Customer profile retrieved successfully", profile));
   });
+
+  getReferralInfo = asyncHandler(async (req, res) => {
+    const referralCode = `JT-${req.user.phone ? req.user.phone.slice(-6) : "TAP"}-${req.user.id.slice(-4)}`.toUpperCase();
+    const mockReferralInfo = {
+      referralCode,
+      referralEarningsPaise: 5000,
+      referralHistory: [
+        { name: "Aarav Sharma", status: "COMPLETED", date: "2026-07-15", rewardPaise: 2500 },
+        { name: "Riya Patel", status: "PENDING", date: "2026-08-01", rewardPaise: 0 },
+        { name: "Vikram Malhotra", status: "COMPLETED", date: "2026-06-10", rewardPaise: 2500 }
+      ]
+    };
+    res.status(200).json(new ApiResponse(200, "Referral information retrieved successfully", mockReferralInfo));
+  });
 }
 
 module.exports = new CustomerProfileController();

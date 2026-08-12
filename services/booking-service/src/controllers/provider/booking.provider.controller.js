@@ -34,9 +34,9 @@ class BookingProviderController {
     try {
       const { id: bookingId } = req.params;
       const actor = { userId: req.user.userId, role: req.user.role };
-      const { rawOtp, purpose } = req.validatedBody;
+      const { rawOtp, purpose, completionPhotos } = req.validatedBody;
 
-      const booking = await this.bookingService.verifyServiceHandshake(bookingId, rawOtp, purpose, actor);
+      const booking = await this.bookingService.verifyServiceHandshake(bookingId, rawOtp, purpose, actor, completionPhotos);
       return ApiResponse.success(res, 200, 'Handshake token validated. Status updated successfully.', booking);
     } catch (error) {
       next(error);
