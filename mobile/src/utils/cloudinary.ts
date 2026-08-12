@@ -83,10 +83,11 @@ function sha1(str: string): string {
 }
 
 // Credentials corresponding to the backend configuration for consistency
-const CLOUDINARY_CLOUD_NAME = "dxlcoceps";
-const CLOUDINARY_API_KEY = "886955152273283";
-const CLOUDINARY_API_SECRET = "aZb887wRq1biU8aygChZLNi6x7E";
-const CLOUDINARY_FOLDER = "justtap/profile-images/customers";
+const CLOUDINARY_CLOUD_NAME = process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME || "";
+const CLOUDINARY_API_KEY = process.env.EXPO_PUBLIC_CLOUDINARY_API_KEY || "";
+const CLOUDINARY_API_SECRET = process.env.EXPO_PUBLIC_CLOUDINARY_API_SECRET || "";
+const CLOUDINARY_FOLDER = process.env.EXPO_PUBLIC_CLOUDINARY_FOLDER || "justtap/profile-images/customers";
+
 
 export interface CloudinaryUploadResponse {
   secure_url: string;
@@ -100,9 +101,11 @@ export async function uploadToCloudinary(fileUri: string): Promise<CloudinaryUpl
   const timestamp = Math.round(new Date().getTime() / 1000).toString();
   
   // Create signature parameters in alphabetical order
+ // const folder = process.env.CLOUDINARY_FOLDER;
   const folder = CLOUDINARY_FOLDER;
   const signatureString = `folder=${folder}&timestamp=${timestamp}${CLOUDINARY_API_SECRET}`;
   const signature = sha1(signatureString);
+
 
   // Setup form data for upload
   const formData = new FormData();
