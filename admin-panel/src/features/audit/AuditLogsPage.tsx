@@ -14,44 +14,7 @@ export default function AuditLogsPage() {
     search: searchTerm || undefined
   });
 
-  // Mock audits fallback
-  const mockAudits = [
-    {
-      _id: 'aud_01',
-      actorPhone: '9876543210',
-      action: 'APPROVE_PROVIDER',
-      target: 'Fast Electric Works',
-      oldValue: 'status: PENDING',
-      newValue: 'status: APPROVED',
-      ipAddress: '192.168.1.1',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-      createdAt: '2026-08-07T12:00:00.000Z'
-    },
-    {
-      _id: 'aud_02',
-      actorPhone: '9876543210',
-      action: 'ADJUST_WALLET_BALANCE',
-      target: 'Anita Sharma (Customer)',
-      oldValue: 'balance: ₹0',
-      newValue: 'balance: ₹500 (Refund adjustment)',
-      ipAddress: '192.168.1.1',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0',
-      createdAt: '2026-08-07T12:05:00.000Z'
-    },
-    {
-      _id: 'aud_03',
-      actorPhone: '9876543210',
-      action: 'UPDATE_PLATFORM_FEE',
-      target: 'System Settings',
-      oldValue: 'commissionRate: 15%',
-      newValue: 'commissionRate: 20%',
-      ipAddress: '192.168.1.25',
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      createdAt: '2026-08-06T14:30:00.000Z'
-    }
-  ];
-
-  const activeLogs = logs || mockAudits;
+  const activeLogs = logs || [];
 
   const filteredLogs = activeLogs.filter((l: any) => 
     l.action.toLowerCase().includes(searchTerm.toLowerCase()) ||

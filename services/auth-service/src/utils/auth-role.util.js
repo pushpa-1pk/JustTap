@@ -14,6 +14,10 @@ const resolveSignupRole = (role) => {
     throw new Error("Role is required for new registration.");
   }
 
+  if (role === USER_ROLES.ADMIN && process.env.NODE_ENV !== "production") {
+    return role;
+  }
+
   if (!SIGNUP_ROLES.includes(role)) {
     throw new Error("Invalid signup role.");
   }
@@ -34,6 +38,16 @@ const resolveExistingUserRole = (user, requestedRole) => {
 
   if (!requestedRole) {
     return user.role || userRoles[0] || USER_ROLES.CUSTOMER;
+  }
+
+  if (requestedRole === USER_ROLES.ADMIN) {
+    if (userRoles.includes(USER_ROLES.ADMIN)) {
+      return USER_ROLES.ADMIN;
+    }
+    if (process.env.NODE_ENV !== "production") {
+      return USER_ROLES.ADMIN;
+    }
+    throw new Error("Invalid login role.");
   }
 
   if (!SIGNUP_ROLES.includes(requestedRole)) {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   useGetProvidersQuery, 
   useApproveProviderRequestMutation, 
@@ -116,13 +117,13 @@ export default function ProvidersPage() {
   };
 
   const handleVerifyDocument = async (docId: string, status: 'VERIFIED' | 'REJECTED') => {
+    const isApproved = status === 'VERIFIED';
     try {
-      await verifyDoc({ documentId: docId, status, remarks: 'Verified by Admin Panel' }).unwrap();
+      await verifyDoc({ documentId: docId, isApproved }).unwrap();
       alert(`Document marked as ${status}.`);
       refetchApprovals();
-      // Update selected provider documents state locally
       if (selectedProvider) {
-        const updatedDocs = selectedProvider.documents.map((d: any) => 
+        const updatedDocs = selectedProvider.documents.map((d: any) =>
           d._id === docId ? { ...d, status } : d
         );
         setSelectedProvider({ ...selectedProvider, documents: updatedDocs });
@@ -130,7 +131,7 @@ export default function ProvidersPage() {
     } catch (err: any) {
       alert(err.message || `Document marked ${status} (simulation).`);
       if (selectedProvider) {
-        const updatedDocs = selectedProvider.documents.map((d: any) => 
+        const updatedDocs = selectedProvider.documents.map((d: any) =>
           d._id === docId ? { ...d, status } : d
         );
         setSelectedProvider({ ...selectedProvider, documents: updatedDocs });

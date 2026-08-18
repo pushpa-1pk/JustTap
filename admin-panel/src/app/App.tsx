@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { useAuth } from '../hooks/useAuth';
 import { logoutSession, updateLastActivity } from '../redux/slices/authSlice';
@@ -23,6 +23,8 @@ import SupportPage from '../features/support/SupportPage';
 import RoleManagementPage from '../features/roles/RoleManagementPage';
 import AuditLogsPage from '../features/audit/AuditLogsPage';
 import SettingsPage from '../features/settings/SettingsPage';
+import DisputesPage from '../features/disputes/DisputesPage';
+import KycReviewPage from '../features/kyc/KycReviewPage';
 
 // Standard fallback if permission is denied
 export const AccessDenied = () => (
@@ -101,7 +103,7 @@ export default function App() {
   }, [logout]);
 
   return (
-    <BrowserRouter>
+    <>
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-destructive text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-bounce">
           <span>{toastMessage}</span>
@@ -120,7 +122,9 @@ export default function App() {
             <Route path="/dashboard" element={<PermissionGuard permission="VIEW_DASHBOARD" element={<DashboardPage />} />} />
             <Route path="/users" element={<PermissionGuard permission="MANAGE_USERS" element={<UsersPage />} />} />
             <Route path="/providers" element={<PermissionGuard permission="MANAGE_PROVIDERS" element={<ProvidersPage />} />} />
+            <Route path="/kyc-review" element={<PermissionGuard permission="MANAGE_PROVIDERS" element={<KycReviewPage />} />} />
             <Route path="/bookings" element={<PermissionGuard permission="MANAGE_BOOKINGS" element={<BookingsPage />} />} />
+            <Route path="/disputes" element={<PermissionGuard permission="MANAGE_BOOKINGS" element={<DisputesPage />} />} />
             <Route path="/tracking" element={<PermissionGuard permission="MANAGE_BOOKINGS" element={<LiveTrackingPage />} />} />
             <Route path="/payments" element={<PermissionGuard permission="VIEW_PAYMENTS" element={<PaymentsPage />} />} />
             <Route path="/wallet" element={<PermissionGuard permission="VIEW_WALLETS" element={<WalletPage />} />} />
@@ -137,6 +141,6 @@ export default function App() {
         {/* Catch-all Redirect */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
-    </BrowserRouter>
+    </>
   );
 }

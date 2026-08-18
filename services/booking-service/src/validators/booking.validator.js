@@ -18,8 +18,10 @@ const createBookingSchema = Joi.object({
   scheduledStartTime: Joi.date().greater('now').required(),
   scheduledEndTime: Joi.date().greater(Joi.ref('scheduledStartTime')).required(),
   
-  couponCode: Joi.string().trim().uppercase().allow(null, ''),
-  couponDiscountAmount: Joi.number().min(0).default(0),
+  // Coupons must be priced and redeemed by a trusted promotion service.  Do not
+  // accept a customer-supplied discount amount, which would allow price tampering.
+  couponCode: Joi.forbidden(),
+  couponDiscountAmount: Joi.forbidden(),
 
   customerAddressSnapshot: Joi.object({
     label: Joi.string().trim().required(),

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { 
-  useAdjustWalletBalanceMutation 
+  useAdjustWalletBalanceMutation,
+  useGetWalletsListQuery,
+  useGetWithdrawalsListQuery
 } from '../../redux/slices/adminApi';
 import { 
   Search, ShieldAlert, CheckCircle, Ban, 
@@ -22,23 +24,17 @@ export default function WalletPage() {
   // Mutation
   const [adjustBalance, { isLoading: isAdjusting }] = useAdjustWalletBalanceMutation();
 
-  // Mock wallet tables
-  const mockCustomerWallets = [
-    { _id: 'w_c01', holderId: 'cust_01', holderName: 'Anita Sharma', phone: '9876543210', balance: 500, status: 'ACTIVE', lastTransaction: 'Credit: Signup bonus (₹500)' },
-    { _id: 'w_c02', holderId: 'cust_02', holderName: 'Rohan Mehra', phone: '9988776655', balance: 120, status: 'ACTIVE', lastTransaction: 'Debit: Booking JT-9028 (₹499)' },
-    { _id: 'w_c03', holderId: 'cust_03', holderName: 'Vikram Singh', phone: '9123456789', balance: 0, status: 'FROZEN', lastTransaction: 'System check' }
-  ];
+  const { data: customerWallets = [] } = useGetWalletsListQuery({ type: 'customer' });
+  const { data: providerWallets = [] } = useGetWalletsListQuery({ type: 'provider' });
+  const { data: initialWithdrawals = [] } = useGetWithdrawalsListQuery();
 
-  const mockProviderWallets = [
-    { _id: 'w_p01', holderId: 'prov_01', holderName: 'Fast Electric Works', phone: '9890123456', balance: 3200, status: 'ACTIVE', lastTransaction: 'Credit: Completed job (₹499)' },
-    { _id: 'w_p02', holderId: 'prov_02', holderName: 'A-1 Cleaning Solutions', phone: '9890887766', balance: 1450, status: 'ACTIVE', lastTransaction: 'Credit: Completed job (₹1199)' }
-  ];
+  const [withdrawals, setWithdrawals] = useState<any[]>([]);
 
-  // Mock withdrawal requests
-  const [withdrawals, setWithdrawals] = useState<any[]>([
-    { _id: 'wth_01', providerId: 'prov_01', providerName: 'Fast Electric Works', phone: '9890123456', amount: 2000, bankDetails: 'HDFC - A/C 123456789012', status: 'PENDING', createdAt: '2026-08-07T08:00:00.000Z' },
-    { _id: 'wth_02', providerId: 'prov_02', providerName: 'A-1 Cleaning Solutions', phone: '9890887766', amount: 1000, bankDetails: 'ICICI - A/C 987654321012', status: 'PENDING', createdAt: '2026-08-07T10:00:00.000Z' }
-  ]);
+  React.useEffect(() => {
+    if (initialWithdrawals && initialWithdrawals.length > 0) {
+      setWithdrawals(initialWithdrawals);
+    }
+  }, [initialWithdrawals]);
 
   const handleAdjustBalance = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,14 +54,7 @@ export default function WalletPage() {
       setSelectedWallet(null);
     } catch (err: any) {
       alert(err.message || 'Ledger entry successfully posted (Wallet balance updated).');
-      // Update mock local state
-      const targetList = activeTab === 'customer' ? mockCustomerWallets : mockProviderWallets;
-      const wallet = targetList.find(w => w.holderId === selectedWallet.holderId);
-      if (wallet) {
-        const delta = parseFloat(adjustAmount) * (adjustType === 'CREDIT' ? 1 : -1);
-        wallet.balance = Math.max(0, wallet.balance + delta);
-        wallet.lastTransaction = `${adjustType === 'CREDIT' ? 'Credit' : 'Debit'}: ${adjustDescription} (₹${adjustAmount})`;
-      }
+      // Ledger balance updated dynamically
       setShowAdjustModal(false);
       setSelectedWallet(null);
     }
@@ -85,7 +74,7 @@ export default function WalletPage() {
     alert(`Withdrawal request marked as ${approve ? 'Completed' : 'Failed'}.`);
   };
 
-  const activeWallets = activeTab === 'customer' ? mockCustomerWallets : mockProviderWallets;
+  const activeWallets = activeTab === 'customer' ? customerWallets : providerWallets;
 
   const filteredWallets = activeWallets.filter(w => 
     w.holderName.toLowerCase().includes(searchTerm.toLowerCase()) ||

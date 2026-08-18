@@ -37,6 +37,7 @@ export default function CustomerLayout() {
       <Stack.Screen name="booking-details" options={{ title: 'Booking Status' }} />
       <Stack.Screen name="write-review" options={{ title: 'Leave Review' }} />
       <Stack.Screen name="notifications" options={{ title: 'Notifications' }} />
+      <Stack.Screen name="category-details" options={{ title: 'Category Services' }} />
     </Stack>
   );
 }

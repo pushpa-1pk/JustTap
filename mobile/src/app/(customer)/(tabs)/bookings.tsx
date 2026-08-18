@@ -16,7 +16,7 @@ import {
   RefreshControl,
   Share
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -290,7 +290,7 @@ export default function CustomerBookingsScreen() {
           <Shimmer width={180} height={28} borderRadius={4} />
           <Shimmer width={44} height={44} borderRadius={14} />
         </View>
-        <ScrollView style={{ paddingHorizontal: 24, paddingTop: GRID.md }}>
+        <ScrollView style={{ paddingHorizontal: 16, paddingTop: GRID.md }}>
           <Shimmer width={'100%'} height={48} borderRadius={14} style={{ marginBottom: GRID.lg }} />
           <Shimmer width={'100%'} height={80} borderRadius={18} style={{ marginBottom: GRID.xl }} />
           <Shimmer width={'100%'} height={180} borderRadius={GRID.radiusCard} style={{ marginBottom: GRID.lg }} />
@@ -317,6 +317,7 @@ export default function CustomerBookingsScreen() {
   // --- Normal / Bookings View ---
   return (
     <View style={{ flex: 1, backgroundColor: BRAND_COLORS.background }}>
+      <Stack.Screen options={{ headerShown: false }} />
       {/* TOP HEADER */}
       <View style={styles.header}>
         <Text style={[typography.h1, { color: BRAND_COLORS.darkText, fontSize: 26, fontWeight: '800' }]}>My Bookings</Text>
@@ -345,7 +346,7 @@ export default function CustomerBookingsScreen() {
 
       {/* FILTER CHIPS ROW */}
       <View style={styles.filtersContainer}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 24 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
           {filterChips.map(chip => (
             <Pressable
               key={chip.id}
@@ -372,7 +373,7 @@ export default function CustomerBookingsScreen() {
       <FlatList
         data={listData}
         keyExtractor={(item) => item._id}
-        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND_COLORS.primary} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={renderSummaryCard}
@@ -399,61 +400,99 @@ export default function CustomerBookingsScreen() {
                   <Image source={{ uri: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150' }} style={styles.proPhoto} />
                   <View style={{ flex: 1, marginLeft: GRID.md }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                      <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
+                      <Text numberOfLines={1} style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '800', maxWidth: '75%' }]}>
                         {item.providerSnapshot?.businessName || 'Assigned Specialist'}
                       </Text>
-                      <Ionicons name="checkmark-circle" size={16} color={BRAND_COLORS.primary} style={{ marginLeft: 4 }} />
+                      <Ionicons name="checkmark-circle" size={16} color="#0284C7" style={{ marginLeft: 4 }} />
                     </View>
                     <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, marginTop: 2 }]}>
-                      Booking BK-{(item._id || '').slice(-5).toUpperCase()}
+                      Provider Specialist
                     </Text>
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
-                    <Text style={[typography.caption, { color: meta.text, fontWeight: '800' }]}>
+                  <View style={[styles.statusBadgeActive, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}>
+                    <Text style={[typography.caption, { color: '#16A34A', fontWeight: '800', fontSize: 10 }]}>
                       {meta.label}
                     </Text>
                   </View>
                 </View>
 
-                {/* Progress track timeline */}
-                <View style={styles.progressRow}>
-                  <View style={styles.progressTrackContainer}>
-                    <View style={styles.progressTrack} />
-                    <View style={[styles.progressTrackFill, { width: `${meta.percent}%`, backgroundColor: BRAND_COLORS.primary }]} />
+                {/* Divider */}
+                <View style={[styles.cardDivider, { backgroundColor: BRAND_COLORS.divider }]} />
+
+                {/* Details layout */}
+                <View style={styles.activeDetailsList}>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: BRAND_COLORS.secondaryText }]}>Service: </Text>
+                    <Text style={[styles.detailValue, { color: BRAND_COLORS.darkText }]}>
+                      {item.serviceDetails?.name || 'Home Services'}
+                    </Text>
                   </View>
-                  <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, marginTop: GRID.xs }]}>
-                    {meta.percent}% Tracked • Provider ETA: 8 mins
-                  </Text>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: BRAND_COLORS.secondaryText }]}>Booking ID: </Text>
+                    <Text style={[styles.detailValue, { color: BRAND_COLORS.darkText }]}>
+                      BK-{(item._id || '').slice(-5).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: BRAND_COLORS.secondaryText }]}>ETA: </Text>
+                    <Text style={[styles.detailValue, { color: '#16A34A', fontWeight: '700' }]}>
+                      8 mins (Live)
+                    </Text>
+                  </View>
                 </View>
 
-                <View style={styles.cardFooterRow}>
+                {/* Scheduled Time & Cost Info Panel */}
+                <View style={[styles.infoPanelRow, { backgroundColor: '#F8FAFC' }]}>
                   <View>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>ESTIMATED PRICE</Text>
-                    <Text style={[typography.h3, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
+                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, fontWeight: '600' }]}>Scheduled Time</Text>
+                    <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '700', marginTop: 2 }]}>
+                      {new Date(item.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, fontWeight: '600' }]}>Estimated Cost</Text>
+                    <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '700', marginTop: 2 }]}>
                       ₹{item.priceSnapshot?.finalAmount}
                     </Text>
                   </View>
-                  <View style={styles.cardActionRow}>
+                </View>
+
+                {/* Action button Grid (2x2 layout) */}
+                <View style={styles.gridActionWrapper}>
+                  <View style={styles.gridActionRow}>
                     <ScalePressable
-                      style={[styles.smallActionBtn, { backgroundColor: BRAND_COLORS.accent }]}
+                      style={[styles.gridActionBtnFilled, { backgroundColor: '#16A34A' }]}
                       onPress={() => router.push({ pathname: '/(customer)/booking-details', params: { bookingId: item._id } })}
                     >
-                      <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>Track Live</Text>
+                      <Ionicons name="navigate" size={14} color="#FFFFFF" />
+                      <Text style={[styles.gridActionTextFilled, { color: '#FFFFFF' }]}>Track Live</Text>
                     </ScalePressable>
                     <ScalePressable
-                      style={[styles.smallIconBtn, { borderColor: BRAND_COLORS.divider }]}
+                      style={[styles.gridActionBtnOutline, { borderColor: '#16A34A' }]}
                       onPress={() => {}}
                     >
-                      <Ionicons name="chatbubble-ellipses-outline" size={18} color={BRAND_COLORS.darkText} />
+                      <Ionicons name="call" size={14} color="#16A34A" />
+                      <Text style={[styles.gridActionTextOutline, { color: '#16A34A' }]}>Call Provider</Text>
+                    </ScalePressable>
+                  </View>
+
+                  <View style={styles.gridActionRow}>
+                    <ScalePressable
+                      style={[styles.gridActionBtnOutline, { borderColor: BRAND_COLORS.divider }]}
+                      onPress={() => {}}
+                    >
+                      <Ionicons name="chatbubble-ellipses" size={14} color={BRAND_COLORS.darkText} />
+                      <Text style={[styles.gridActionTextOutline, { color: BRAND_COLORS.darkText }]}>Chat</Text>
                     </ScalePressable>
                     <ScalePressable
-                      style={[styles.smallIconBtn, { borderColor: BRAND_COLORS.divider }]}
+                      style={[styles.gridActionBtnOutline, { borderColor: BRAND_COLORS.error }]}
                       onPress={() => {
                         setSelectedBookingForAction(item);
                         setIsCancelSheetOpen(true);
                       }}
                     >
-                      <Ionicons name="close-circle-outline" size={18} color={BRAND_COLORS.error} />
+                      <Ionicons name="close-circle" size={14} color={BRAND_COLORS.error} />
+                      <Text style={[styles.gridActionTextOutline, { color: BRAND_COLORS.error }]}>Cancel Booking</Text>
                     </ScalePressable>
                   </View>
                 </View>
@@ -463,62 +502,84 @@ export default function CustomerBookingsScreen() {
 
           // 2. UPCOMING APPOINTMENTS
           if (['REQUESTED', 'PENDING_PROVIDER_RESPONSE'].includes(item.status)) {
+            const formattedDate = new Date(item.scheduledStartTime).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+            const formattedTime = new Date(item.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             return (
               <View style={[styles.bookingCard, { borderColor: BRAND_COLORS.divider }]}>
-                <View style={styles.cardHeaderRow}>
-                  <View style={[styles.dateBlock, { backgroundColor: BRAND_COLORS.secondaryBg }]}>
-                    <Text style={[typography.bodyMedium, { color: BRAND_COLORS.accent, fontWeight: '800' }]}>TOM</Text>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>10:00</Text>
-                  </View>
-                  <View style={{ flex: 1, marginLeft: GRID.md }}>
+                <View style={styles.upcomingHeaderRow}>
+                  <View>
                     <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
-                      Awaiting AC Servicing
+                      {formattedDate}
                     </Text>
                     <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, marginTop: 2 }]}>
-                      Booking BK-{(item._id || '').slice(-5).toUpperCase()}
+                      {formattedTime}
                     </Text>
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: meta.bg }]}>
-                    <Text style={[typography.caption, { color: meta.text, fontWeight: '800' }]}>
+                  <View style={[styles.statusBadgeActive, { backgroundColor: '#FEF3C7', borderColor: '#FCD34D' }]}>
+                    <Text style={[typography.caption, { color: '#D97706', fontWeight: '800', fontSize: 10 }]}>
                       {meta.label}
                     </Text>
                   </View>
                 </View>
 
-                <View style={styles.upcomingDetails}>
-                  <Ionicons name="location-outline" size={16} color={BRAND_COLORS.secondaryText} />
-                  <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, marginLeft: 4, flex: 1 }]} numberOfLines={1}>
-                    {item.customerAddressSnapshot?.addressLine1 || 'Home, Mumbai'}
-                  </Text>
-                </View>
+                {/* Divider */}
+                <View style={[styles.cardDivider, { backgroundColor: BRAND_COLORS.divider }]} />
 
-                <View style={styles.cardFooterRow}>
-                  <View>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>UPFRONT BUDGET</Text>
-                    <Text style={[typography.h3, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
+                <View style={styles.activeDetailsList}>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: BRAND_COLORS.secondaryText }]}>Provider: </Text>
+                    <Text style={[styles.detailValue, { color: BRAND_COLORS.darkText }]}>
+                      {item.providerSnapshot?.businessName || 'Finding professional...'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: BRAND_COLORS.secondaryText }]}>Service: </Text>
+                    <Text style={[styles.detailValue, { color: BRAND_COLORS.darkText }]}>
+                      {item.serviceDetails?.name || 'Home Services'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: BRAND_COLORS.secondaryText }]}>Location: </Text>
+                    <Text numberOfLines={1} style={[styles.detailValue, { color: BRAND_COLORS.darkText, flex: 1 }]}>
+                      {item.customerAddressSnapshot?.addressLine1 || 'Mumbai, India'}
+                    </Text>
+                  </View>
+                  <View style={styles.detailRow}>
+                    <Text style={[styles.detailLabel, { color: BRAND_COLORS.secondaryText }]}>Est. Cost: </Text>
+                    <Text style={[styles.detailValue, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>
                       ₹{item.priceSnapshot?.finalAmount}
                     </Text>
                   </View>
-                  <View style={styles.cardActionRow}>
-                    <ScalePressable
-                      style={[styles.smallActionBtn, { borderColor: BRAND_COLORS.divider }]}
-                      onPress={() => {
-                        setSelectedBookingForAction(item);
-                        setIsRescheduleSheetOpen(true);
-                      }}
-                    >
-                      <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>Reschedule</Text>
-                    </ScalePressable>
-                    <ScalePressable
-                      style={[styles.smallActionBtn, { borderColor: BRAND_COLORS.error }]}
-                      onPress={() => {
-                        setSelectedBookingForAction(item);
-                        setIsCancelSheetOpen(true);
-                      }}
-                    >
-                      <Text style={[typography.caption, { color: BRAND_COLORS.error, fontWeight: '700' }]}>Cancel</Text>
-                    </ScalePressable>
-                  </View>
+                </View>
+
+                {/* Divider */}
+                <View style={[styles.cardDivider, { backgroundColor: BRAND_COLORS.divider }]} />
+
+                <View style={styles.cardFooterActionsRow}>
+                  <ScalePressable
+                    style={[styles.gridActionBtnOutlineCompact, { borderColor: BRAND_COLORS.divider }]}
+                    onPress={() => {
+                      setSelectedBookingForAction(item);
+                      setIsRescheduleSheetOpen(true);
+                    }}
+                  >
+                    <Text style={[styles.gridActionTextOutline, { color: BRAND_COLORS.darkText, fontSize: 12 }]}>Reschedule</Text>
+                  </ScalePressable>
+                  <ScalePressable
+                    style={[styles.gridActionBtnOutlineCompact, { borderColor: BRAND_COLORS.error }]}
+                    onPress={() => {
+                      setSelectedBookingForAction(item);
+                      setIsCancelSheetOpen(true);
+                    }}
+                  >
+                    <Text style={[styles.gridActionTextOutline, { color: BRAND_COLORS.error, fontSize: 12 }]}>Cancel</Text>
+                  </ScalePressable>
+                  <ScalePressable
+                    style={[styles.gridActionBtnFilledCompact, { backgroundColor: '#16A34A' }]}
+                    onPress={() => router.push({ pathname: '/(customer)/booking-details', params: { bookingId: item._id } })}
+                  >
+                    <Text style={[styles.gridActionTextFilled, { color: '#FFFFFF', fontSize: 12 }]}>View Details</Text>
+                  </ScalePressable>
                 </View>
               </View>
             );
@@ -529,55 +590,59 @@ export default function CustomerBookingsScreen() {
             const currentRating = localRatings[item._id] || 0;
             return (
               <View style={[styles.bookingCard, { borderColor: BRAND_COLORS.divider }]}>
-                <View style={styles.cardHeaderRow}>
-                  <Ionicons name="checkmark-circle-sharp" size={32} color={BRAND_COLORS.primary} />
+                <View style={styles.completedHeaderRow}>
+                  <View style={[styles.checkCircleLarge, { backgroundColor: 'rgba(22, 163, 74, 0.08)' }]}>
+                    <Ionicons name="checkmark-circle" size={24} color="#16A34A" />
+                  </View>
                   <View style={{ flex: 1, marginLeft: GRID.md }}>
                     <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
-                      Home Deep Cleaning
+                      {item.serviceDetails?.name || 'Home Services'}
                     </Text>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>
-                      Completed • {new Date(item.updatedAt).toLocaleDateString()}
+                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, marginTop: 2 }]}>
+                      Completed • {new Date(item.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
                     </Text>
                   </View>
-                  <Text style={[typography.h3, { color: BRAND_COLORS.primary, fontWeight: '800' }]}>
+                  <Text style={[typography.h3, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
                     ₹{item.priceSnapshot?.finalAmount}
                   </Text>
                 </View>
 
                 {/* Rating selection reminders */}
-                <View style={[styles.ratingPanel, { backgroundColor: BRAND_COLORS.secondaryBg }]}>
-                  <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
+                <View style={[styles.ratingCardContainer, { backgroundColor: '#FFFDF0', borderColor: '#FEF08A' }]}>
+                  <Text style={[typography.caption, { color: '#D97706', fontWeight: '800', fontSize: 11 }]}>
                     {currentRating > 0 ? 'Thanks for rating!' : 'Rate your experience'}
                   </Text>
-                  <View style={{ flexDirection: 'row', gap: 6, marginTop: GRID.xs }}>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
                     {[1, 2, 3, 4, 5].map(star => (
                       <Pressable key={star} onPress={() => handleRateBooking(item._id, star)}>
                         <Ionicons
                           name={star <= currentRating ? 'star' : 'star-outline'}
-                          size={20}
-                          color={BRAND_COLORS.accent}
+                          size={24}
+                          color="#F59E0B"
                         />
                       </Pressable>
                     ))}
                   </View>
                 </View>
 
-                <View style={styles.cardFooterRow}>
-                  <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>
-                    Paid via {item.paymentStatus === 'PAID' ? 'Wallet' : 'Cash'}
-                  </Text>
-                  <View style={styles.cardActionRow}>
+                <View style={styles.cardFooterActionsRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>
+                      Paid via {item.paymentStatus === 'PAID' ? 'Wallet' : 'Cash'}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
                     <ScalePressable
-                      style={[styles.smallActionBtn, { borderColor: BRAND_COLORS.divider }]}
+                      style={[styles.gridActionBtnOutlineCompact, { borderColor: BRAND_COLORS.divider }]}
                       onPress={() => {}}
                     >
-                      <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>Invoice</Text>
+                      <Text style={[styles.gridActionTextOutline, { color: BRAND_COLORS.darkText, fontSize: 12 }]}>Invoice</Text>
                     </ScalePressable>
                     <ScalePressable
-                      style={[styles.smallActionBtn, { backgroundColor: BRAND_COLORS.accent }]}
+                      style={[styles.gridActionBtnFilledCompact, { backgroundColor: '#16A34A' }]}
                       onPress={() => router.push('/search')}
                     >
-                      <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>Book Again</Text>
+                      <Text style={[styles.gridActionTextFilled, { color: '#FFFFFF', fontSize: 12 }]}>Book Again</Text>
                     </ScalePressable>
                   </View>
                 </View>
@@ -587,14 +652,16 @@ export default function CustomerBookingsScreen() {
 
           // 4. CANCELLED APPOINTMENTS
           return (
-            <View style={[styles.bookingCard, { borderColor: BRAND_COLORS.divider, opacity: 0.85 }]}>
-              <View style={styles.cardHeaderRow}>
-                <Ionicons name="close-circle-sharp" size={32} color={BRAND_COLORS.error} />
+            <View style={[styles.bookingCard, { borderColor: BRAND_COLORS.divider, opacity: 0.95 }]}>
+              <View style={styles.completedHeaderRow}>
+                <View style={[styles.checkCircleLarge, { backgroundColor: 'rgba(239, 68, 68, 0.08)' }]}>
+                  <Ionicons name="close-circle" size={24} color="#EF4444" />
+                </View>
                 <View style={{ flex: 1, marginLeft: GRID.md }}>
                   <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
-                    Plumbing Repair
+                    {item.serviceDetails?.name || 'Home Services'}
                   </Text>
-                  <Text style={[typography.caption, { color: BRAND_COLORS.error, fontWeight: '700' }]}>
+                  <Text style={[typography.caption, { color: BRAND_COLORS.error, fontWeight: '700', marginTop: 2 }]}>
                     Cancelled • Refund Completed
                   </Text>
                 </View>
@@ -603,28 +670,30 @@ export default function CustomerBookingsScreen() {
                 </Text>
               </View>
 
-              <View style={[styles.refundCard, { backgroundColor: BRAND_COLORS.secondaryBg }]}>
-                <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]} numberOfLines={1}>
-                  Refund status: <Text style={{ color: BRAND_COLORS.primary, fontWeight: '800' }}>Credited to Wallet</Text> • ₹{item.priceSnapshot?.finalAmount}
+              <View style={[styles.ratingCardContainer, { backgroundColor: '#F8FAFC', borderColor: BRAND_COLORS.divider }]}>
+                <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, fontSize: 11 }]}>
+                  Refund status: <Text style={{ color: '#16A34A', fontWeight: '800' }}>Credited to Wallet</Text> • ₹{item.priceSnapshot?.finalAmount}
                 </Text>
               </View>
 
-              <View style={styles.cardFooterRow}>
-                <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>
-                  Reason: {item.additionalNotes || 'Cancelled by customer'}
-                </Text>
-                <View style={styles.cardActionRow}>
+              <View style={styles.cardFooterActionsRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]} numberOfLines={1}>
+                    Reason: {item.additionalNotes || 'Cancelled by customer'}
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
                   <ScalePressable
-                    style={[styles.smallActionBtn, { borderColor: BRAND_COLORS.divider }]}
+                    style={[styles.gridActionBtnOutlineCompact, { borderColor: BRAND_COLORS.divider }]}
                     onPress={() => {}}
                   >
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>Support</Text>
+                    <Text style={[styles.gridActionTextOutline, { color: BRAND_COLORS.darkText, fontSize: 12 }]}>Support</Text>
                   </ScalePressable>
                   <ScalePressable
-                    style={[styles.smallActionBtn, { backgroundColor: BRAND_COLORS.accent }]}
+                    style={[styles.gridActionBtnFilledCompact, { backgroundColor: '#16A34A' }]}
                     onPress={() => router.push('/search')}
                   >
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>Rebook</Text>
+                    <Text style={[styles.gridActionTextFilled, { color: '#FFFFFF', fontSize: 12 }]}>Rebook</Text>
                   </ScalePressable>
                 </View>
               </View>
@@ -901,8 +970,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 56 : 24,
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 72 : 48,
     marginBottom: GRID.md,
   },
   headerIconButton: {
@@ -931,7 +1000,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: BRAND_COLORS.divider,
-    marginHorizontal: 24,
+    marginHorizontal: 16,
     paddingHorizontal: GRID.md,
     backgroundColor: '#F1F5F9',
     marginBottom: GRID.md,
@@ -1182,7 +1251,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
     flex: 1,
     justifyContent: 'space-between',
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
     paddingVertical: GRID.xl,
   },
   emptyContent: {
@@ -1204,5 +1273,117 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: GRID.xl,
+  },
+  statusBadgeActive: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignSelf: 'flex-start',
+  },
+  cardDivider: {
+    height: 1,
+    marginVertical: 12,
+  },
+  activeDetailsList: {
+    gap: 6,
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  detailLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  detailValue: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  infoPanelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  gridActionWrapper: {
+    gap: 8,
+  },
+  gridActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  gridActionBtnFilled: {
+    flex: 1,
+    height: 38,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  gridActionBtnOutline: {
+    flex: 1,
+    height: 38,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  gridActionTextFilled: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  gridActionTextOutline: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  upcomingHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  cardFooterActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  gridActionBtnFilledCompact: {
+    paddingHorizontal: 12,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridActionBtnOutlineCompact: {
+    paddingHorizontal: 12,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  completedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  checkCircleLarge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ratingCardContainer: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 12,
   },
 });

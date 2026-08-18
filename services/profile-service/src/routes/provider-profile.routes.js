@@ -7,6 +7,7 @@ const providerProfileController = require("../controllers/provider-profile.contr
 
 router.use(providerRateLimiter, verifyToken, verifyRole(["provider"]));
 router.post("/", profileImageUpload, providerProfileController.createProfile);
+router.get("/kyc/requirements", providerProfileController.getKycRequirements);
 router.get("/", providerProfileController.getProfile);
 router.put("/", profileImageUpload, providerProfileController.updateProfile);
 router.put("/location", providerProfileController.updateLocation);

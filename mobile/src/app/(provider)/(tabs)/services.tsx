@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Pressable, FlatList, TextInput, ActivityIndicator, Modal, Switch, Alert, RefreshControl } from 'react-native';
+import { StyleSheet, Text, View, Pressable, FlatList, TextInput, ActivityIndicator, Modal, Switch, Alert, RefreshControl, ScrollView } from 'react-native';
 import { useTheme } from '@/hooks/useTheme';
 import { 
   useGetProviderServices, 

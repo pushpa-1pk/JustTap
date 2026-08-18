@@ -19,7 +19,7 @@ class BookingLifecycleWorker {
   async initializeConsumerGroup() {
     try {
       // Create the group starting from '$' (only consume new messages appended after group boot)
-      await redisClient.xCreateConsumerGroup(this.streamName, this.consumerGroup, '$', {
+      await redisClient.xGroupCreate(this.streamName, this.consumerGroup, '$', {
         MKSTREAM: true
       });
       logger.info(`Redis Stream Consumer Group initialized successfully: [${this.consumerGroup}]`);

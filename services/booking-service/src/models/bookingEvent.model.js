@@ -14,6 +14,12 @@ const BookingEventSchema = new mongoose.Schema(
       uppercase: true, 
       index: true 
     },
+    // Set only for events that must be emitted once for a booking.
+    dedupeKey: {
+      type: String,
+      default: null,
+      trim: true
+    },
     payload: { 
       type: mongoose.Schema.Types.Mixed, 
       required: true 
@@ -42,5 +48,9 @@ const BookingEventSchema = new mongoose.Schema(
 
 // Index optimizes background workers polling for unpublished events chronologically
 BookingEventSchema.index({ published: 1, createdAt: 1 });
+BookingEventSchema.index(
+  { dedupeKey: 1 },
+  { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } }
+);
 
 module.exports = mongoose.model('BookingEvent', BookingEventSchema);

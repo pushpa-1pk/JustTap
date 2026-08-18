@@ -77,6 +77,10 @@ class ServiceRepository {
   async softDelete(id) {
     return Service.findByIdAndUpdate(id, { isActive: false }, { new: true });
   }
+
+  async deactivateByCategoryId(categoryId) {
+    return Service.updateMany({ categoryId }, { isActive: false });
+  }
 }
 
 module.exports = new ServiceRepository();

@@ -16,33 +16,7 @@ export default function ReviewsPage() {
   const { data: reports, isLoading, refetch } = useGetAbuseReportsQuery();
   const [moderateReview] = useModerateReviewMutation();
 
-  // Mock reported reviews database
-  const mockReports = [
-    {
-      _id: 'rep_1',
-      reviewId: 'rev_101',
-      reviewerName: 'Rohan Mehra',
-      providerBusiness: 'Fast Electric Works',
-      rating: 1,
-      comment: 'Extremely rude provider, did not fix the socket properly and overcharged!',
-      reportsCount: 3,
-      reason: 'Contains abusive terms and harassment claims',
-      createdAt: '2026-08-07T09:00:00.000Z'
-    },
-    {
-      _id: 'rep_2',
-      reviewId: 'rev_102',
-      reviewerName: 'Spam Bot 400',
-      providerBusiness: 'A-1 Cleaning Solutions',
-      rating: 5,
-      comment: 'Earn money fast at www.spamurl.com, click now for free credits!',
-      reportsCount: 5,
-      reason: 'Spam link advertising and bot content',
-      createdAt: '2026-08-06T14:30:00.000Z'
-    }
-  ];
-
-  const activeReports = reports || mockReports;
+  const activeReports = reports || [];
 
   const handleModeration = async (reviewId: string, action: 'HIDE' | 'DELETE' | 'DISMISS') => {
     const reason = window.prompt(`Confirm moderation action [${action}]. Enter remarks:`);

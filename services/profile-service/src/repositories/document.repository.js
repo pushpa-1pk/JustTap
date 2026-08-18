@@ -25,7 +25,7 @@ class DocumentRepository {
     return await Document.findByIdAndUpdate(id, data, { new: true });
   }
 
-  async updateStatus(id, status, verifiedBy = null) {
+  async updateStatus(id, status, verifiedBy = null, rejectionReason = null) {
     const updateData = {
       status,
     };
@@ -33,6 +33,11 @@ class DocumentRepository {
     if (status === "approved") {
       updateData.verifiedAt = new Date();
       updateData.verifiedBy = verifiedBy;
+      updateData.rejectionReason = ""; // Clear any prior rejection reason on approve
+    }
+
+    if (status === "rejected" && rejectionReason) {
+      updateData.rejectionReason = rejectionReason;
     }
 
     return await Document.findByIdAndUpdate(id, updateData, { new: true });

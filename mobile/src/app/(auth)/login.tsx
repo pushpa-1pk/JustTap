@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
+import { Alert, StyleSheet, Text, View, Pressable, TextInput, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,7 +27,8 @@ type FlowStep = 'language' | 'onboarding' | 'login';
 export default function LoginScreen() {
   const { colors, typography, spacing, border } = useTheme();
   const router = useRouter();
-  const [step, setStep] = useState<FlowStep>('language');
+  const insets = useSafeAreaInsets();
+  const [step, setStep] = useState<FlowStep>('onboarding');
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'hi'>('en');
   const [onboardingIndex, setOnboardingIndex] = useState(0);
   const [sendOtp, { isLoading: isSendingOtp }] = useSendOtpMutation();
@@ -55,15 +59,7 @@ export default function LoginScreen() {
     },
   ];
 
-  const handleLanguageSelect = (lang: 'en' | 'hi') => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedLanguage(lang);
-  };
 
-  const handleLanguageContinue = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setStep('onboarding');
-  };
 
   const handleOnboardingNext = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -86,10 +82,9 @@ export default function LoginScreen() {
       }
     } catch (err: any) {
       console.warn('Send OTP error:', err);
-      const { Alert } = require('react-native');
       Alert.alert(
-        'Login Failed',
-        err.data?.message || 'Failed to send OTP. Please check your internet connection or mobile number and try again.'
+        'Could not send code',
+        err.data?.message || (err?.status ? 'Please check your mobile number and try again.' : 'No internet connection or server is unavailable. Please reconnect and retry.')
       );
     }
   };
@@ -103,113 +98,95 @@ export default function LoginScreen() {
         contentContainerStyle={{ flexGrow: 1 }} 
         keyboardShouldPersistTaps="handled"
       >
-        <View style={[styles.container, { backgroundColor: colors.background, padding: spacing.xl }]}>
+        <View style={[
+          styles.container, 
+          { 
+            backgroundColor: colors.background, 
+            padding: step === 'onboarding' ? 0 : spacing.xl 
+          }
+        ]}>
           
-          {/* STEP 1: LANGUAGE SELECTION */}
-          {step === 'language' && (
-            <View style={styles.stepContainer}>
-              <Text style={[typography.h2, { color: colors.text, textAlign: 'center', marginBottom: spacing.sm }]}>
-                Choose Language / भाषा चुनें
-              </Text>
-              <Text style={[typography.bodyMedium, { color: colors.textSecondary, textAlign: 'center', marginBottom: spacing.xxl }]}>
-                Select your preferred language to continue
-              </Text>
 
-              {/* Language Option En */}
-              <Pressable
-                style={[
-                  styles.optionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: selectedLanguage === 'en' ? colors.primary : colors.border,
-                    borderWidth: selectedLanguage === 'en' ? 2 : 1,
-                  },
-                ]}
-                onPress={() => handleLanguageSelect('en')}
-              >
-                <View style={styles.radioRow}>
-                  <Text style={[typography.h3, { color: colors.text }]}>English</Text>
-                  <View style={[styles.radioCircle, { borderColor: selectedLanguage === 'en' ? colors.primary : colors.textSecondary }]}>
-                    {selectedLanguage === 'en' && <View style={[styles.radioDot, { backgroundColor: colors.primary }]} />}
-                  </View>
-                </View>
-              </Pressable>
-
-              {/* Language Option Hi */}
-              <Pressable
-                style={[
-                  styles.optionCard,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: selectedLanguage === 'hi' ? colors.primary : colors.border,
-                    borderWidth: selectedLanguage === 'hi' ? 2 : 1,
-                    marginTop: spacing.md,
-                  },
-                ]}
-                onPress={() => handleLanguageSelect('hi')}
-              >
-                <View style={styles.radioRow}>
-                  <Text style={[typography.h3, { color: colors.text }]}>हिन्दी (Hindi)</Text>
-                  <View style={[styles.radioCircle, { borderColor: selectedLanguage === 'hi' ? colors.primary : colors.textSecondary }]}>
-                    {selectedLanguage === 'hi' && <View style={[styles.radioDot, { backgroundColor: colors.primary }]} />}
-                  </View>
-                </View>
-              </Pressable>
-
-              <Pressable
-                style={[styles.actionButton, { backgroundColor: colors.primary, marginTop: spacing.xxl }]}
-                onPress={handleLanguageContinue}
-              >
-                <Text style={[typography.buttonText, { color: colors.onPrimary }]}>Continue</Text>
-              </Pressable>
-            </View>
-          )}
 
           {/* STEP 2: ONBOARDING CAROUSEL */}
           {step === 'onboarding' && (
-            <View style={styles.stepContainer}>
-              <View style={styles.carouselContainer}>
-                {/* Brand Logo Header */}
-                <Text style={[typography.h1, { color: colors.text, textAlign: 'center', marginBottom: spacing.xxl }]}>
-                  Just<Text style={{ color: colors.secondary }}>Tap</Text>
-                </Text>
+            <LinearGradient
+              colors={['#FEF08A', '#FEF9C3', '#FFFFFF']}
+              style={[styles.onboardingGradient, { paddingTop: insets.top + 8, paddingBottom: 0 }]}
+            >
+              {/* Provider Image */}
+              <View style={styles.imageContainer}>
+                {onboardingIndex === 0 && (
+                  <Image
+                    source={require('../../../assets/images/onboarding_1@.png')}
+                    style={styles.providerImage}
+                    resizeMode="contain"
+                  />
+                )}
+                {onboardingIndex === 1 && (
+                  <Image
+                    source={require('../../../assets/images/onboarding_2@.png')}
+                    style={styles.providerImage}
+                    resizeMode="contain"
+                  />
+                )}
+                {onboardingIndex === 2 && (
+                  <Image
+                    source={require('../../../assets/images/onboarding_3@.png')}
+                    style={styles.providerImage}
+                    resizeMode="contain"
+                  />
+                )}
+              </View>
+
+              {/* Content Card (white background at the bottom) */}
+              <View style={[styles.onboardingContentCard, { paddingBottom: insets.bottom > 0 ? insets.bottom + 16 : 24 }]}>
+                {/* Slide Indicators */}
+                <View style={styles.indicatorRowOnboarding}>
+                  {onboardingSlides.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.indicatorDotOnboarding,
+                        {
+                          backgroundColor: i === onboardingIndex ? '#FBC02D' : '#e2e8f0',
+                          width: i === onboardingIndex ? 16 : 8,
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
 
                 {/* Animated Slide Content */}
-                <View key={onboardingIndex} style={styles.slideContent}>
-                  <Text style={[typography.h2, { color: colors.text, textAlign: 'center', marginBottom: spacing.md }]}>
+                <View key={onboardingIndex} style={styles.slideContentOnboarding}>
+                  <Text style={[typography.h2, styles.slideTitle, { color: colors.text }]}>
                     {onboardingSlides[onboardingIndex].title}
                   </Text>
-                  <Text style={[typography.bodyLarge, { color: colors.textSecondary, textAlign: 'center', lineHeight: 24 }]}>
+                  <Text style={[typography.bodyMedium, styles.slideDesc, { color: colors.textSecondary }]}>
                     {onboardingSlides[onboardingIndex].desc}
                   </Text>
                 </View>
-              </View>
 
-              {/* Slide Indicators */}
-              <View style={styles.indicatorRow}>
-                {onboardingSlides.map((_, i) => (
-                  <View 
-                    key={i} 
-                    style={[
-                      styles.indicatorDot, 
-                      { 
-                        backgroundColor: i === onboardingIndex ? colors.primary : colors.border,
-                        width: i === onboardingIndex ? 20 : 8 
-                      }
-                    ]} 
-                  />
-                ))}
+                {/* Let's Get Started / Next Button */}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.sliderButton,
+                    {
+                      backgroundColor: '#FBC02D',
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                  ]}
+                  onPress={handleOnboardingNext}
+                >
+                  <Text style={styles.sliderButtonText}>
+                    {onboardingIndex === onboardingSlides.length - 1 ? "Let's Get Started" : "Next"}
+                  </Text>
+                  <View style={styles.sliderButtonCircle}>
+                    <Ionicons name="chevron-forward" size={20} color="#FBC02D" />
+                  </View>
+                </Pressable>
               </View>
-
-              <Pressable
-                style={[styles.actionButton, { backgroundColor: colors.primary, marginTop: spacing.xxl }]}
-                onPress={handleOnboardingNext}
-              >
-                <Text style={[typography.buttonText, { color: colors.onPrimary }]}>
-                  {onboardingIndex === onboardingSlides.length - 1 ? 'Get Started' : 'Next'}
-                </Text>
-              </Pressable>
-            </View>
+            </LinearGradient>
           )}
 
           {/* STEP 3: PHONE LOGIN FORM */}
@@ -345,24 +322,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 4,
   },
-  carouselContainer: {
-    minHeight: 280,
-    justifyContent: 'center',
-  },
-  slideContent: {
-    paddingHorizontal: 12,
-  },
-  indicatorRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 24,
-  },
-  indicatorDot: {
-    height: 8,
-    borderRadius: 4,
-  },
   inputLabelRow: {
     marginBottom: 8,
   },
@@ -388,5 +347,151 @@ const styles = StyleSheet.create({
     flex: 1,
     height: '100%',
     padding: 0, // Reset default padding
+  },
+  onboardingGradient: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'space-between',
+    minHeight: 680,
+  },
+  onboardingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+  },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoBox: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  logoJ: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#FBC02D',
+  },
+  logoText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  skipButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 99,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  skipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  imageContainer: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginVertical: 0,
+  },
+  providerImage: {
+    width: '100%',
+    height: '100%',
+  },
+  onboardingContentCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
+    alignItems: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: -10 },
+    shadowOpacity: 0.04,
+    shadowRadius: 20,
+    elevation: 10,
+    width: '100%',
+  },
+  indicatorRowOnboarding: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 28,
+  },
+  indicatorDotOnboarding: {
+    height: 8,
+    borderRadius: 4,
+  },
+  slideContentOnboarding: {
+    alignItems: 'center',
+    marginBottom: 36,
+  },
+  slideTitle: {
+    fontWeight: '800',
+    fontSize: 24,
+    lineHeight: 32,
+    textAlign: 'center',
+    marginBottom: 12,
+    paddingHorizontal: 8,
+  },
+  slideDesc: {
+    textAlign: 'center',
+    lineHeight: 22,
+    paddingHorizontal: 12,
+  },
+  sliderButton: {
+    width: '100%',
+    height: 58,
+    borderRadius: 29,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingLeft: 28,
+    paddingRight: 6,
+    shadowColor: '#FBC02D',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  sliderButtonText: {
+    color: '#1E293B',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  sliderButtonCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
 });

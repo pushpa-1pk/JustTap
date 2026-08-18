@@ -1,5 +1,4 @@
 const { v4: uuidv4 } = require("uuid");
-const mongoose = require("mongoose");
 const paymentService = require("../services/payment.service");
 const refundService = require("../services/refund.service");
 const withdrawalService = require("../services/withdrawal.service");
@@ -170,18 +169,10 @@ class PaymentController {
       if (!wallet) {
         wallet = await CustomerWallet.create({
           customerId,
-          balancePaise: 100000,
-          rewardPoints: 250,
-          cashbackPaise: 1500,
-          referralBonusPaise: 5000,
-        });
-
-        await CustomerWalletTransaction.create({
-          customerId,
-          amountPaise: 100000,
-          type: "CREDIT",
-          balanceType: "WALLET",
-          description: "Starter wallet balance credit",
+          balancePaise: 0,
+          rewardPoints: 0,
+          cashbackPaise: 0,
+          referralBonusPaise: 0,
         });
       }
       return res.status(200).json(new ApiResponse(200, wallet, "Customer wallet resolved."));
@@ -202,27 +193,7 @@ class PaymentController {
 
   addCustomerFunds = async (req, res, next) => {
     try {
-      const customerId = req.user.id;
-      const { amountPaise } = req.body;
-      if (!amountPaise || amountPaise <= 0) {
-        throw new ApiError(400, "Amount must be a positive integer.");
-      }
-
-      const wallet = await CustomerWallet.findOneAndUpdate(
-        { customerId },
-        { $inc: { balancePaise: amountPaise } },
-        { new: true, upsert: true }
-      );
-
-      await CustomerWalletTransaction.create({
-        customerId,
-        amountPaise,
-        type: "CREDIT",
-        balanceType: "WALLET",
-        description: "Added funds via payment method",
-      });
-
-      return res.status(200).json(new ApiResponse(200, wallet, "Funds added successfully."));
+      throw new ApiError(501, "Wallet top-ups require a verified payment-gateway flow and are not enabled yet.");
     } catch (error) {
       next(error);
     }
@@ -240,23 +211,7 @@ class PaymentController {
 
   addPaymentMethod = async (req, res, next) => {
     try {
-      const userId = req.user.id;
-      const { type, details } = req.body;
-      if (!type || !details) {
-        throw new ApiError(400, "Payment type and details are required.");
-      }
-
-      const count = await PaymentMethod.countDocuments({ userId });
-      const isDefault = count === 0;
-
-      const method = await PaymentMethod.create({
-        userId,
-        type,
-        details,
-        isDefault,
-      });
-
-      return res.status(201).json(new ApiResponse(201, method, "Payment method saved successfully."));
+      throw new ApiError(501, "Saving a payment method requires gateway tokenization and is not enabled yet.");
     } catch (error) {
       next(error);
     }
@@ -311,39 +266,6 @@ class PaymentController {
 
   getAvailableCoupons = async (req, res, next) => {
     try {
-      const count = await Coupon.countDocuments({});
-      if (count === 0) {
-        const currentYear = new Date().getFullYear();
-        await Coupon.create([
-          {
-            code: "WELCOME50",
-            description: "Get 50% off on your first booking",
-            discountType: "PERCENTAGE",
-            discountValue: 50,
-            maxDiscountPaise: 50000,
-            expiryDate: new Date(`${currentYear + 1}-12-31`),
-            isActive: true,
-          },
-          {
-            code: "JTP150",
-            description: "Get 150 INR flat off on any home cleaning services",
-            discountType: "FIXED",
-            discountValue: 15000,
-            expiryDate: new Date(`${currentYear + 1}-12-31`),
-            isActive: true,
-          },
-          {
-            code: "FESTIVE20",
-            description: "20% off up to 300 INR on repairs",
-            discountType: "PERCENTAGE",
-            discountValue: 20,
-            maxDiscountPaise: 30000,
-            expiryDate: new Date(`${currentYear + 1}-12-31`),
-            isActive: true,
-          },
-        ]);
-      }
-
       const coupons = await Coupon.find({ isActive: true, expiryDate: { $gt: new Date() } });
       return res.status(200).json(new ApiResponse(200, coupons, "Available coupons resolved."));
     } catch (error) {
@@ -354,21 +276,6 @@ class PaymentController {
   getCustomerInvoices = async (req, res, next) => {
     try {
       const recipientId = req.user.id;
-      const count = await Invoice.countDocuments({ recipientId });
-      if (count === 0) {
-        await Invoice.create({
-          bookingId: new mongoose.Types.ObjectId(),
-          invoiceNumber: `JT-${new Date().getFullYear()}-0000000001`,
-          type: "CUSTOMER_RECEIPT",
-          invoiceStatus: "READY",
-          recipientId,
-          totalAmountPaise: 45000,
-          taxAmountPaise: 4500,
-          s3Url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-          correlationId: "initial-seed",
-        });
-      }
-
       const invoices = await Invoice.find({ recipientId, deletedAt: null }).sort({ createdAt: -1 });
       return res.status(200).json(new ApiResponse(200, invoices, "Customer invoices resolved."));
     } catch (error) {

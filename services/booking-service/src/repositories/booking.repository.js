@@ -79,6 +79,10 @@ class BookingRepository extends BaseRepository {
     return this.findPaginated({ customerId }, { page, limit });
   }
 
+  async findByCustomerAndIdempotencyKey(customerId, idempotencyKey) {
+    return this.findOne({ customerId, idempotencyKey });
+  }
+
   async findProviderBookings(providerId, page = 1, limit = 10) {
     return this.findPaginated({ providerId }, { page, limit });
   }

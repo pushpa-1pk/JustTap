@@ -10,7 +10,7 @@ import {
   DollarSign, Wallet, BookOpen, BellRing, Star, 
   LifeBuoy, UserCheck, History, Settings, Menu, 
   ChevronLeft, Bell, Search, LogOut, Sun, Moon, 
-  Activity, Shield, Laptop, Command 
+  Activity, Shield, Laptop, Command, Scale, ShieldCheck
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -65,7 +65,9 @@ export default function AdminLayout() {
     { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" />, permission: 'VIEW_DASHBOARD' },
     { name: 'Customer Manager', path: '/users', icon: <Users className="w-5 h-5" />, permission: 'MANAGE_USERS' },
     { name: 'Provider Manager', path: '/providers', icon: <Briefcase className="w-5 h-5" />, permission: 'MANAGE_PROVIDERS' },
+    { name: 'KYC Review Queue', path: '/kyc-review', icon: <ShieldCheck className="w-5 h-5" />, permission: 'MANAGE_PROVIDERS' },
     { name: 'Booking Manager', path: '/bookings', icon: <Calendar className="w-5 h-5" />, permission: 'MANAGE_BOOKINGS' },
+    { name: 'Dispute Resolution', path: '/disputes', icon: <Scale className="w-5 h-5" />, permission: 'MANAGE_BOOKINGS' },
     { name: 'Real-time Tracking', path: '/tracking', icon: <Map className="w-5 h-5" />, permission: 'MANAGE_BOOKINGS' },
     { name: 'Payment Control', path: '/payments', icon: <DollarSign className="w-5 h-5" />, permission: 'VIEW_PAYMENTS' },
     { name: 'Wallet Ledgers', path: '/wallet', icon: <Wallet className="w-5 h-5" />, permission: 'VIEW_WALLETS' },

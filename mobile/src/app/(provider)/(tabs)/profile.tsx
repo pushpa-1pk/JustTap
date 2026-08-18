@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View, ScrollView, Pressable, Switch, ActivityIndicator, RefreshControl, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useDispatch, useSelector } from 'react-redux';
@@ -9,33 +9,42 @@ import * as Haptics from 'expo-haptics';
 
 import { useGetProviderProfile, useToggleOnlineStatus } from '@/hooks/useProviderProfile';
 import { useSwitchRole } from '@/hooks/useProfile';
-import { logout, switchRole } from '@/redux/slices/authSlice';
+import { logout } from '@/redux/slices/authSlice';
+import { resetProviderState } from '@/redux/slices/providerSlice';
 import { RootState } from '@/redux/store';
 import { secureStore } from '@/utils/secureStore';
 import { AppUserRole, getDefaultRouteForRole } from '@/utils/auth';
 import { useTheme } from '@/hooks/useTheme';
 
 export default function ProviderProfileScreen() {
-  const { colors, typography, spacing } = useTheme();
+  const { colors, typography } = useTheme();
   const router = useRouter();
   const dispatch = useDispatch();
   const queryClient = useQueryClient();
 
+  // 1. Selector bindings (Section 4g logout check)
   const user = useSelector((state: RootState) => state.auth.user);
+  const activeJob = useSelector((state: RootState) => state.provider.activeJob);
   const roles = user?.roles || ['PROVIDER'];
 
   // Queries & Mutations
-  const { data: profile, isLoading, isRefetching, refetch } = useGetProviderProfile();
+  const { data: profile, isLoading, isRefetching, refetch, isError } = useGetProviderProfile();
   const toggleOnlineMutation = useToggleOnlineStatus();
   const switchRoleMutation = useSwitchRole();
 
+  // 2. Duty Toggle (Section 4a & 4b)
   const handleToggleOnline = async (value: boolean) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     try {
       await toggleOnlineMutation.mutateAsync(value);
-      refetch();
     } catch (err) {
-      console.error('Toggle online status failed:', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert(
+        "Couldn't update status",
+        "Check your connection and try again."
+      );
+      // Invalidate queries so cache reflects server truth rather than local state (Section 4b)
+      queryClient.invalidateQueries({ queryKey: ['provider', 'profile'] });
     }
   };
 
@@ -51,14 +60,37 @@ export default function ProviderProfileScreen() {
     }
   };
 
-  const handleLogout = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await secureStore.clearAll();
-    queryClient.clear();
-    dispatch(logout());
-    router.replace('/(auth)/login');
+  // 3. Confirm Logout with Active Job protection (Section 4g)
+  const handleLogout = () => {
+    if (activeJob !== null) {
+      Alert.alert(
+        'Active job in progress',
+        "You can't log out while a job is in progress. Complete or cancel it first."
+      );
+      return;
+    }
+    Alert.alert(
+      'Log out?',
+      'You will need to sign in again to receive jobs.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            await secureStore.clearAll();
+            queryClient.clear();
+            dispatch(resetProviderState());
+            dispatch(logout());
+            router.replace('/(auth)/login');
+          }
+        },
+      ]
+    );
   };
 
+  // 4. Loading state
   if (isLoading) {
     return (
       <View style={[styles.center, { backgroundColor: colors.background }]}>
@@ -67,15 +99,112 @@ export default function ProviderProfileScreen() {
     );
   }
 
-  // Fallback defaults if no profile exists
-  const displayName = profile?.businessName || user?.phone || 'Service Provider';
+  // 5. Error state (Section 4f)
+  if (isError) {
+    return (
+      <View style={[styles.center, { backgroundColor: colors.background, padding: 24 }]}>
+        <Ionicons name="alert-circle-outline" size={64} color={colors.danger} />
+        <Text style={[typography.h3, { color: colors.text, marginTop: 16, textAlign: 'center' }]}>
+          Couldn't load your profile
+        </Text>
+        <Pressable
+          onPress={() => refetch()}
+          style={({ pressed }) => [
+            styles.retryBtn,
+            { backgroundColor: colors.secondary },
+            pressed && { opacity: 0.8 }
+          ]}
+        >
+          <Text style={styles.retryText}>Retry</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  // 6. Dynamic parameters extraction (Section 4c & 4d)
+  const displayName = profile?.businessName || 'Service Provider';
   const providerId = profile?.userId ? `SP-${profile.userId.slice(-6).toUpperCase()}` : 'SP-PENDING';
   const rating = profile?.rating || 0.0;
   const jobs = profile?.totalJobs || 0;
   const isOnline = profile?.isOnline ?? false;
   const expYears = profile?.experience || 0;
-  const radius = profile?.workingRadius || 10;
   const avatar = profile?.profileImage || null;
+
+  const categoriesText = profile?.services && profile.services.length > 0
+    ? Array.from(new Set(profile.services.map((s: any) => s.category))).slice(0, 2).join(' & ') + ' Expert'
+    : 'Complete your profile to add services';
+
+  const formatMemberSince = (dateStr?: string) => {
+    if (!dateStr) return 'Member since: Join date not provided';
+    try {
+      const date = new Date(dateStr);
+      const month = date.toLocaleDateString([], { month: 'short' });
+      const year = date.getFullYear();
+      return `Member since ${month} ${year}`;
+    } catch {
+      return 'Member since: Join date not provided';
+    }
+  };
+
+  const renderVerificationBanner = () => {
+    const status = profile?.verificationStatus?.toUpperCase() || 'PENDING';
+    
+    if (status === 'APPROVED') {
+      return null;
+    }
+    
+    let bannerBg: string = colors.warning + '12';
+    let bannerBorder: string = colors.warning;
+    let iconColor: string = colors.warning;
+    let title = `Verification Status: ${status}`;
+    let desc = '';
+    let actionBtnText = '';
+    let onActionPress = () => {};
+
+    if (status === 'PENDING') {
+      desc = 'Verification Pending — Upload your KYC documents to start receiving jobs.';
+      actionBtnText = 'Upload Documents';
+      onActionPress = () => router.push('/kyc-upload');
+    } else if (status === 'UNDER_REVIEW') {
+      desc = "Documents Under Review — We're verifying your submission. This usually takes 24-48 hours.";
+    } else if (status === 'REJECTED') {
+      bannerBg = colors.danger + '12';
+      bannerBorder = colors.danger;
+      iconColor = colors.danger;
+      desc = `Verification Rejected — ${profile?.rejectionReason || 'Please review and resubmit your documents.'}`;
+      actionBtnText = 'Resubmit Documents';
+      onActionPress = () => router.push({
+        pathname: '/kyc-upload',
+        params: { resubmit: 'true' }
+      });
+    }
+
+    return (
+      <View style={[styles.warningCard, { backgroundColor: bannerBg, borderColor: bannerBorder }]}>
+        <Ionicons name="warning" size={24} color={iconColor} />
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <Text style={[typography.bodySmall, { color: iconColor, fontWeight: '700' }]}>
+            {title}
+          </Text>
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2, lineHeight: 16 }]}>
+            {desc}
+          </Text>
+          {actionBtnText ? (
+            <Pressable
+              onPress={onActionPress}
+              style={({ pressed }) => [
+                styles.bannerBtn,
+                { backgroundColor: iconColor },
+                pressed && { opacity: 0.8 }
+              ]}
+            >
+              <Text style={styles.bannerBtnText}>{actionBtnText}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <ScrollView
@@ -101,29 +230,35 @@ export default function ProviderProfileScreen() {
               <Text style={[typography.h3, { color: colors.text, flexShrink: 1 }]} numberOfLines={1}>
                 {displayName}
               </Text>
-              {profile?.verificationStatus === 'approved' && (
+              {profile?.verificationStatus?.toUpperCase() === 'APPROVED' && (
                 <Ionicons name="checkmark-circle" size={18} color={colors.secondary} style={{ marginLeft: 4 }} />
               )}
             </View>
             <Text style={[typography.caption, { color: colors.textSecondary }]}>ID: {providerId}</Text>
             <Text style={[typography.bodySmall, { color: colors.secondary, fontWeight: '700', marginTop: 2 }]}>
-              Plumbing & Repair Expert
+              {categoriesText}
             </Text>
-            <Text style={[typography.caption, { color: colors.textSecondary }]}>Member since: Aug 2026</Text>
+            <Text style={[typography.caption, { color: colors.textSecondary }]}>
+              {formatMemberSince(profile?.createdAt)}
+            </Text>
           </View>
         </View>
 
         <View style={styles.divider} />
 
-        {/* Contact info details */}
+        {/* Contact info details (Section 4c - Phone/Email formatting) */}
         <View style={styles.contactContainer}>
           <View style={styles.contactRow}>
             <Ionicons name="call-outline" size={14} color={colors.textSecondary} />
-            <Text style={[typography.caption, { color: colors.text, marginLeft: 6 }]}>+91 {user?.phone || '9999999999'}</Text>
+            <Text style={[typography.caption, { color: colors.text, marginLeft: 6 }]}>
+              {user?.phone ? `+91 ${user.phone}` : 'Phone not provided'}
+            </Text>
           </View>
           <View style={[styles.contactRow, { marginTop: 6 }]}>
             <Ionicons name="mail-outline" size={14} color={colors.textSecondary} />
-            <Text style={[typography.caption, { color: colors.text, marginLeft: 6 }]}>{profile?.email || 'payouts@justtap.com'}</Text>
+            <Text style={[typography.caption, { color: colors.text, marginLeft: 6 }]}>
+              {profile?.email || 'Email not provided'}
+            </Text>
           </View>
         </View>
 
@@ -148,20 +283,8 @@ export default function ProviderProfileScreen() {
         </View>
       </View>
 
-      {/* Verification Warning Gated Banner */}
-      {profile?.verificationStatus !== 'approved' && (
-        <View style={[styles.warningCard, { backgroundColor: colors.warning + '12', borderColor: colors.warning }]}>
-          <Ionicons name="warning" size={20} color={colors.warning} />
-          <View style={{ flex: 1, marginLeft: 10 }}>
-            <Text style={[typography.bodySmall, { color: colors.warning, fontWeight: '700' }]}>
-              Verification Status: {profile?.verificationStatus?.toUpperCase() || 'PENDING'}
-            </Text>
-            <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 2 }]}>
-              Please upload all required KYC Documents to unlock full job dispatches.
-            </Text>
-          </View>
-        </View>
-      )}
+      {/* Verification Warning Gated Banner (Section 4e) */}
+      {renderVerificationBanner()}
 
       {/* Profile Statistics Widgets */}
       <View style={styles.statsRow}>
@@ -220,17 +343,18 @@ export default function ProviderProfileScreen() {
         <Text style={styles.sectionTitle}>Profile Configurations</Text>
         
         <MenuRow 
-          title="Edit Profile" 
+          title={profile ? "Edit Profile" : "Complete Profile"} 
           icon="create" 
-          onPress={() => router.push('/edit-profile' as any)} 
+          onPress={() => router.push('/edit-profile')} 
           colors={colors} 
           typography={typography} 
+          isCompleteProfile={!profile}
         />
         
         <MenuRow 
           title="Business Details" 
           icon="business" 
-          onPress={() => router.push('/business-info' as any)} 
+          onPress={() => router.push('/business-info')} 
           colors={colors} 
           typography={typography} 
         />
@@ -238,7 +362,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="Service Management" 
           icon="construct" 
-          onPress={() => router.push('/services' as any)} 
+          onPress={() => router.push('/services')} 
           colors={colors} 
           typography={typography} 
         />
@@ -246,7 +370,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="Manage Service Areas" 
           icon="map" 
-          onPress={() => router.push('/service-areas' as any)} 
+          onPress={() => router.push('/service-areas')} 
           colors={colors} 
           typography={typography} 
         />
@@ -254,7 +378,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="Configure Working Hours" 
           icon="time" 
-          onPress={() => router.push('/working-hours' as any)} 
+          onPress={() => router.push('/working-hours')} 
           colors={colors} 
           typography={typography} 
         />
@@ -262,7 +386,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="Identity Verification KYC" 
           icon="document-text" 
-          onPress={() => router.push('/kyc-upload' as any)} 
+          onPress={() => router.push('/kyc-upload')} 
           colors={colors} 
           typography={typography} 
         />
@@ -270,7 +394,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="Wallet & Payouts" 
           icon="wallet" 
-          onPress={() => router.push('/wallet' as any)} 
+          onPress={() => router.push('/wallet')} 
           colors={colors} 
           typography={typography} 
         />
@@ -278,7 +402,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="Bank Details Setup" 
           icon="card" 
-          onPress={() => router.push('/bank-setup' as any)} 
+          onPress={() => router.push('/bank-setup')} 
           colors={colors} 
           typography={typography} 
         />
@@ -286,7 +410,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="Customer Review Logs" 
           icon="star" 
-          onPress={() => router.push('/reviews' as any)} 
+          onPress={() => router.push('/reviews')} 
           colors={colors} 
           typography={typography} 
         />
@@ -294,7 +418,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="Performance Metrics" 
           icon="bar-chart" 
-          onPress={() => router.push('/performance' as any)} 
+          onPress={() => router.push('/performance')} 
           colors={colors} 
           typography={typography} 
         />
@@ -302,7 +426,7 @@ export default function ProviderProfileScreen() {
         <MenuRow 
           title="App Settings & Security" 
           icon="settings" 
-          onPress={() => router.push('/settings' as any)} 
+          onPress={() => router.push('/settings')} 
           colors={colors} 
           typography={typography} 
         />
@@ -317,18 +441,21 @@ export default function ProviderProfileScreen() {
   );
 }
 
-function MenuRow({ title, icon, onPress, colors, typography }: { 
+function MenuRow({ title, icon, onPress, colors, typography, isCompleteProfile }: { 
   title: string; 
   icon: string; 
   onPress: () => void; 
   colors: any; 
-  typography: any 
+  typography: any;
+  isCompleteProfile?: boolean;
 }) {
+  const finalColor = isCompleteProfile ? '#EF4444' : colors.text;
+  const iconColor = isCompleteProfile ? '#EF4444' : colors.textSecondary;
   return (
     <Pressable style={[styles.menuRow, { borderTopColor: colors.border }]} onPress={onPress}>
-      <Ionicons name={icon as any} size={20} color={colors.textSecondary} style={{ marginRight: 12 }} />
-      <Text style={[typography.bodyMedium, { color: colors.text, flex: 1, fontWeight: '600' }]}>{title}</Text>
-      <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+      <Ionicons name={icon as any} size={20} color={iconColor} style={{ marginRight: 12 }} />
+      <Text style={[typography.bodyMedium, { color: finalColor, flex: 1, fontWeight: isCompleteProfile ? '800' : '600' }]}>{title}</Text>
+      <Ionicons name="chevron-forward" size={18} color={iconColor} />
     </Pressable>
   );
 }
@@ -382,7 +509,7 @@ const styles = StyleSheet.create({
   },
   warningCard: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
@@ -451,5 +578,31 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F1F5F9',
     marginVertical: 10,
+  },
+  retryBtn: {
+    marginTop: 16,
+    height: 44,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  bannerBtn: {
+    marginTop: 8,
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  bannerBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

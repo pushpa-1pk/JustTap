@@ -1,5 +1,5 @@
 const Joi = require("joi");
-const { PLATFORMS } = require("../utils/constants");
+const { PLATFORMS, USER_ROLES } = require("../utils/constants");
 const { normalizePhoneNumber } = require("../utils/phone.util");
 const { getAllowedSignupRoles } = require("../utils/auth-role.util");
 
@@ -26,7 +26,7 @@ const verifyOtpSchema = Joi.object({
   phone: phoneSchema,
   otp: Joi.string().trim().length(6).pattern(/^\d+$/).required(),
   role: Joi.string()
-    .valid(...getAllowedSignupRoles())
+    .valid(...getAllowedSignupRoles(), USER_ROLES.ADMIN)
     .optional(),
   deviceId: Joi.string().trim().required(),
   deviceName: Joi.string().trim().required(),

@@ -7,8 +7,82 @@ import {
 import { 
   Search, Plus, Edit2, Trash2, CheckCircle, 
   XCircle, Clock, BookOpen, Sparkles, Award, 
-  HelpCircle, AlertCircle, RefreshCw 
+  HelpCircle, AlertCircle, RefreshCw,
+  Home, Scissors, Car, Laptop, Heart, Briefcase, Megaphone, Camera, Truck, Plane, Wrench, Hammer, Building, FileText, Key, PawPrint, Smile, Leaf, Brush, Shirt, Coffee, Shield, Gift, Dumbbell, Palette, Repeat, ShoppingBag, Globe, User
 } from 'lucide-react';
+
+const ICON_MAP: Record<string, React.ComponentType<any>> = {
+  'home-outline': Home,
+  'rose-outline': Scissors,
+  'car-outline': Car,
+  'desktop-outline': Laptop,
+  'book-outline': BookOpen,
+  'pulse-outline': Heart,
+  'briefcase-outline': Briefcase,
+  'megaphone-outline': Megaphone,
+  'camera-outline': Camera,
+  'sparkles-outline': Sparkles,
+  'bus-outline': Truck,
+  'airplane-outline': Plane,
+  'construct-outline': Wrench,
+  'hammer-outline': Hammer,
+  'business-outline': Building,
+  'document-text-outline': FileText,
+  'key-outline': Key,
+  'paw-outline': PawPrint,
+  'happy-outline': Smile,
+  'heart-outline': Heart,
+  'leaf-outline': Leaf,
+  'brush-outline': Brush,
+  'shirt-outline': Shirt,
+  'cafe-outline': Coffee,
+  'shield-half-outline': Shield,
+  'ribbon-outline': Gift,
+  'laptop-outline': Laptop,
+  'people-circle-outline': Briefcase,
+  'barbell-outline': Dumbbell,
+  'color-palette-outline': Palette,
+  'repeat-outline': Repeat,
+  'bag-handle-outline': ShoppingBag,
+  'globe-outline': Globe,
+  'person-outline': User,
+  'refresh-circle-outline': RefreshCw,
+  
+  // Flat names
+  'home': Home,
+  'scissors': Scissors,
+  'car': Car,
+  'laptop': Laptop,
+  'book': BookOpen,
+  'heart': Heart,
+  'briefcase': Briefcase,
+  'megaphone': Megaphone,
+  'camera': Camera,
+  'sparkles': Sparkles,
+  'truck': Truck,
+  'plane': Plane,
+  'wrench': Wrench,
+  'hammer': Hammer,
+  'building': Building,
+  'file-text': FileText,
+  'key': Key,
+  'paw': PawPrint,
+  'smile': Smile,
+  'leaf': Leaf,
+  'brush': Brush,
+  'shirt': Shirt,
+  'coffee': Coffee,
+  'shield': Shield,
+  'gift': Gift,
+  'barbell': Dumbbell,
+  'palette': Palette,
+  'repeat': Repeat,
+  'shopping-bag': ShoppingBag,
+  'globe': Globe,
+  'user': User,
+  'refresh': RefreshCw,
+  'flash': Sparkles
+};
 
 export default function ServicesPage() {
   const [activeTab, setActiveTab] = useState<'categories' | 'custom-skills'>('categories');
@@ -27,12 +101,18 @@ export default function ServicesPage() {
   const [catName, setCatName] = useState('');
   const [catSlug, setCatSlug] = useState('');
   const [catDesc, setCatDesc] = useState('');
+  const [catIcon, setCatIcon] = useState('home-outline');
+  const [catIconType, setCatIconType] = useState<'preset' | 'custom' | 'upload'>('preset');
+  const [catCustomIcon, setCatCustomIcon] = useState('');
+  const [catSortOrder, setCatSortOrder] = useState('0');
 
   const [srvName, setSrvName] = useState('');
   const [srvSlug, setSrvSlug] = useState('');
   const [srvDesc, setSrvDesc] = useState('');
   const [srvDuration, setSrvDuration] = useState('60');
   const [srvIcon, setSrvIcon] = useState('flash');
+  const [srvIconType, setSrvIconType] = useState<'preset' | 'custom' | 'upload'>('preset');
+  const [srvCustomIcon, setSrvCustomIcon] = useState('');
   const [srvSortOrder, setSrvSortOrder] = useState('0');
   const [srvPricingType, setSrvPricingType] = useState<'FIXED' | 'BASE_PLUS_VARIABLE'>('BASE_PLUS_VARIABLE');
   const [srvBasePrice, setSrvBasePrice] = useState('199');
@@ -81,17 +161,26 @@ export default function ServicesPage() {
   const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const finalIcon = ((catIconType === 'custom' || catIconType === 'upload') && catCustomIcon.trim()) ? catCustomIcon.trim() : catIcon;
+      const payload = {
+        name: catName,
+        slug: catSlug,
+        description: catDesc,
+        icon: finalIcon,
+        sortOrder: parseInt(catSortOrder) || 0
+      };
       if (categoryModalMode === 'create') {
-        await createCategory({ name: catName, slug: catSlug, description: catDesc }).unwrap();
+        await createCategory(payload).unwrap();
       } else {
-        await updateCategory({ categoryId: editingCategory._id, name: catName, slug: catSlug, description: catDesc }).unwrap();
+        await updateCategory({ categoryId: editingCategory._id, ...payload }).unwrap();
       }
       alert('Category saved successfully.');
       setShowCategoryModal(false);
       refetchCategories();
     } catch (err: any) {
-      alert(err.message || 'Category successfully saved (Dev mock list updated).');
-      setShowCategoryModal(false);
+      console.error(err);
+      const errMsg = err.data?.message || err.message || JSON.stringify(err);
+      alert('Error saving category: ' + errMsg);
     }
   };
 
@@ -112,13 +201,14 @@ export default function ServicesPage() {
   const handleSaveService = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCategory) return;
+    const finalIcon = ((srvIconType === 'custom' || srvIconType === 'upload') && srvCustomIcon.trim()) ? srvCustomIcon.trim() : srvIcon;
     const payload = {
       categoryId: selectedCategory._id, 
       name: srvName, 
       slug: srvSlug, 
       description: srvDesc, 
       estimatedDuration: parseInt(srvDuration) || 60,
-      icon: srvIcon,
+      icon: finalIcon,
       sortOrder: parseInt(srvSortOrder) || 0,
       pricing: {
         type: srvPricingType,
@@ -140,8 +230,9 @@ export default function ServicesPage() {
       setShowServiceModal(false);
       refetchServices();
     } catch (err: any) {
-      alert(err.message || 'Service successfully saved (Dev mock list updated).');
-      setShowServiceModal(false);
+      console.error(err);
+      const errMsg = err.data?.message || err.message || JSON.stringify(err);
+      alert('Error saving service: ' + errMsg);
     }
   };
 
@@ -226,6 +317,10 @@ export default function ServicesPage() {
                   setCatName('');
                   setCatSlug('');
                   setCatDesc('');
+                  setCatIcon('home-outline');
+                  setCatIconType('preset');
+                  setCatCustomIcon('');
+                  setCatSortOrder('0');
                   setShowCategoryModal(true);
                 }}
                 className="flex items-center gap-1 text-[11px] bg-primary text-primary-foreground font-bold px-2.5 py-1.5 rounded-lg cursor-pointer"
@@ -235,49 +330,69 @@ export default function ServicesPage() {
             </div>
 
             <div className="space-y-2">
-              {activeCategories.map((cat: any) => (
-                <div
-                  key={cat._id}
-                  onClick={() => setSelectedCategory(cat)}
-                  className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex justify-between items-start ${
-                    selectedCategory?._id === cat._id
-                      ? 'bg-primary/5 border-primary shadow-sm'
-                      : 'bg-card border-border hover:bg-secondary/40'
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <h4 className="font-bold font-heading">{cat.name}</h4>
-                    <p className="text-[11px] text-muted-foreground truncate max-w-[150px] mt-0.5">{cat.description}</p>
-                    <span className="text-[9px] font-mono text-muted-foreground/80 mt-1 block">/{cat.slug}</span>
-                  </div>
+              {activeCategories.map((cat: any) => {
+                const IconComponent = ICON_MAP[cat.icon] || HelpCircle;
+                return (
+                  <div
+                    key={cat._id}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex justify-between items-start ${
+                      selectedCategory?._id === cat._id
+                        ? 'bg-primary/5 border-primary shadow-sm'
+                        : 'bg-card border-border hover:bg-secondary/40'
+                    }`}
+                  >
+                    <div className="flex gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5 overflow-hidden">
+                        {cat.icon?.startsWith('http') ? (
+                          <img src={cat.icon} alt={cat.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <IconComponent className="w-4.5 h-4.5" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold font-heading">{cat.name}</h4>
+                        <p className="text-[11px] text-muted-foreground truncate max-w-[150px] mt-0.5">{cat.description}</p>
+                        <span className="text-[9px] font-mono text-muted-foreground/80 mt-1 block">/{cat.slug}</span>
+                      </div>
+                    </div>
 
-                  <div className="flex gap-1 shrink-0">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCategoryModalMode('edit');
-                        setEditingCategory(cat);
-                        setCatName(cat.name);
-                        setCatSlug(cat.slug);
-                        setCatDesc(cat.description);
-                        setShowCategoryModal(true);
-                      }}
-                      className="p-1 rounded bg-secondary hover:bg-primary hover:text-primary-foreground text-muted-foreground transition-all cursor-pointer"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteCategory(cat._id);
-                      }}
-                      className="p-1 rounded bg-secondary hover:bg-destructive hover:text-white text-muted-foreground transition-all cursor-pointer"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCategoryModalMode('edit');
+                          setEditingCategory(cat);
+                          setCatName(cat.name);
+                          setCatSlug(cat.slug);
+                          setCatDesc(cat.description);
+                          setCatSortOrder(String(cat.sortOrder || 0));
+                          
+                          const isCustom = cat.icon?.startsWith('http://') || cat.icon?.startsWith('https://');
+                          const isUpload = cat.icon?.startsWith('data:image/');
+                          setCatIconType(isUpload ? 'upload' : (isCustom ? 'custom' : 'preset'));
+                          setCatCustomIcon((isCustom || isUpload) ? cat.icon : '');
+                          setCatIcon((isCustom || isUpload) ? 'home-outline' : (cat.icon || 'home-outline'));
+                          
+                          setShowCategoryModal(true);
+                        }}
+                        className="p-1 rounded bg-secondary hover:bg-primary hover:text-primary-foreground text-muted-foreground transition-all cursor-pointer"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCategory(cat._id);
+                        }}
+                        className="p-1 rounded bg-secondary hover:bg-destructive hover:text-white text-muted-foreground transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -298,6 +413,8 @@ export default function ServicesPage() {
                       setSrvDesc('');
                       setSrvDuration('60');
                       setSrvIcon('briefcase');
+                      setSrvIconType('preset');
+                      setSrvCustomIcon('');
                       setSrvSortOrder('0');
                       setSrvPricingType('BASE_PLUS_VARIABLE');
                       setSrvBasePrice('199');
@@ -326,9 +443,21 @@ export default function ServicesPage() {
                         {activeServices.map((srv: any) => (
                           <tr key={srv._id} className="hover:bg-secondary/10 transition-all">
                             <td className="p-4">
-                              <div className="flex flex-col">
-                                <span className="font-bold text-foreground/90">{srv.name}</span>
-                                <span className="text-xs text-muted-foreground">{srv.description}</span>
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 overflow-hidden">
+                                  {srv.icon?.startsWith('http') ? (
+                                    <img src={srv.icon} alt={srv.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    (() => {
+                                      const Icon = ICON_MAP[srv.icon] || HelpCircle;
+                                      return <Icon className="w-4.5 h-4.5" />;
+                                    })()
+                                  )}
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="font-bold text-foreground/90">{srv.name}</span>
+                                  <span className="text-[11px] text-muted-foreground">{srv.description}</span>
+                                </div>
                               </div>
                             </td>
                             <td className="p-4 font-semibold text-primary">
@@ -346,7 +475,12 @@ export default function ServicesPage() {
                                   setSrvSlug(srv.slug);
                                   setSrvDesc(srv.description || '');
                                   setSrvDuration(String(srv.estimatedDuration || 60));
-                                  setSrvIcon(srv.icon || 'briefcase');
+                                  
+                                  const isCustom = srv.icon?.startsWith('http://') || srv.icon?.startsWith('https://');
+                                  const isUpload = srv.icon?.startsWith('data:image/');
+                                  setSrvIconType(isUpload ? 'upload' : (isCustom ? 'custom' : 'preset'));
+                                  setSrvCustomIcon((isCustom || isUpload) ? srv.icon : '');
+                                  setSrvIcon((isCustom || isUpload) ? 'briefcase' : (srv.icon || 'briefcase'));
                                   setSrvSortOrder(String(srv.sortOrder || 0));
                                   setSrvPricingType(srv.pricing?.type || 'BASE_PLUS_VARIABLE');
                                   setSrvBasePrice(String(srv.pricing?.basePrice || 0));
@@ -476,6 +610,90 @@ export default function ServicesPage() {
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] text-muted-foreground uppercase font-bold">Category Icon</label>
+                  <div className="flex gap-1 bg-secondary/80 p-0.5 rounded-lg border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setCatIconType('preset')}
+                      className={`text-[9px] font-bold px-2 py-1 rounded-md cursor-pointer transition-all ${catIconType === 'preset' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Preset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatIconType('custom')}
+                      className={`text-[9px] font-bold px-2 py-1 rounded-md cursor-pointer transition-all ${catIconType === 'custom' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      URL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCatIconType('upload')}
+                      className={`text-[9px] font-bold px-2 py-1 rounded-md cursor-pointer transition-all ${catIconType === 'upload' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Upload File
+                    </button>
+                  </div>
+                </div>
+                {catIconType === 'preset' && (
+                  <select
+                    value={catIcon}
+                    onChange={(e) => setCatIcon(e.target.value)}
+                    className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-xs focus:outline-none"
+                  >
+                    {Object.keys(ICON_MAP).filter(key => key.endsWith('-outline') || key === 'flash').map((key) => (
+                      <option key={key} value={key}>{key.replace('-outline', '')}</option>
+                    ))}
+                  </select>
+                )}
+                {catIconType === 'custom' && (
+                  <input
+                    type="text"
+                    placeholder="e.g. https://example.com/icon.png"
+                    value={catCustomIcon}
+                    onChange={(e) => setCatCustomIcon(e.target.value)}
+                    className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-xs focus:outline-none"
+                  />
+                )}
+                {catIconType === 'upload' && (
+                  <div className="space-y-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setCatCustomIcon(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-xs text-muted-foreground file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-primary/10 file:text-primary file:cursor-pointer"
+                    />
+                    {catCustomIcon && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <img src={catCustomIcon} alt="Preview" className="w-8 h-8 rounded-lg object-cover border border-border" />
+                        <span className="text-[10px] text-muted-foreground">Image loaded</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-muted-foreground uppercase font-bold">Sort Order</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 0"
+                  value={catSortOrder}
+                  onChange={(e) => setCatSortOrder(e.target.value)}
+                  className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-xs focus:outline-none"
+                  required
+                />
+              </div>
             </div>
             <div className="flex gap-2 justify-end pt-1">
               <button type="button" onClick={() => setShowCategoryModal(false)} className="px-3 py-1.5 border border-border rounded-lg text-xs cursor-pointer">Cancel</button>
@@ -522,15 +740,78 @@ export default function ServicesPage() {
                   required
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-[10px] text-muted-foreground uppercase font-bold">Icon Name</label>
-                <input
-                  type="text"
-                  value={srvIcon}
-                  onChange={(e) => setSrvIcon(e.target.value)}
-                  className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-xs focus:outline-none"
-                  required
-                />
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] text-muted-foreground uppercase font-bold">Service Icon</label>
+                  <div className="flex gap-1 bg-secondary/80 p-0.5 rounded-lg border border-border">
+                    <button
+                      type="button"
+                      onClick={() => setSrvIconType('preset')}
+                      className={`text-[9px] font-bold px-2 py-1 rounded-md cursor-pointer transition-all ${srvIconType === 'preset' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Preset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSrvIconType('custom')}
+                      className={`text-[9px] font-bold px-2 py-1 rounded-md cursor-pointer transition-all ${srvIconType === 'custom' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      URL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSrvIconType('upload')}
+                      className={`text-[9px] font-bold px-2 py-1 rounded-md cursor-pointer transition-all ${srvIconType === 'upload' ? 'bg-background text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Upload File
+                    </button>
+                  </div>
+                </div>
+                {srvIconType === 'preset' && (
+                  <select
+                    value={srvIcon}
+                    onChange={(e) => setSrvIcon(e.target.value)}
+                    className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-xs focus:outline-none"
+                  >
+                    {Object.keys(ICON_MAP).filter(key => !key.endsWith('-outline')).map((key) => (
+                      <option key={key} value={key}>{key}</option>
+                    ))}
+                  </select>
+                )}
+                {srvIconType === 'custom' && (
+                  <input
+                    type="text"
+                    placeholder="e.g. https://example.com/icon.png"
+                    value={srvCustomIcon}
+                    onChange={(e) => setSrvCustomIcon(e.target.value)}
+                    className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-xs focus:outline-none"
+                  />
+                )}
+                {srvIconType === 'upload' && (
+                  <div className="space-y-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setSrvCustomIcon(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-xs text-muted-foreground file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[11px] file:font-semibold file:bg-primary/10 file:text-primary file:cursor-pointer"
+                    />
+                    {srvCustomIcon && (
+                      <div className="flex items-center gap-2 mt-1">
+                        <img src={srvCustomIcon} alt="Preview" className="w-8 h-8 rounded-lg object-cover border border-border" />
+                        <span className="text-[10px] text-muted-foreground">Image loaded</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <label className="text-[10px] text-muted-foreground uppercase font-bold">Sort Order</label>

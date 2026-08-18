@@ -9,6 +9,7 @@ import OfflineBanner from '../components/common/OfflineBanner';
 import { getDefaultRouteForRole } from '../utils/auth';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from '../config/reactQuery';
+import { GlobalJobOfferOverlay } from '../components/provider/dashboard/GlobalJobOfferOverlay';
 
 function NavigationGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user } = useSelector((state: RootState) => state.auth);
@@ -112,6 +113,7 @@ export default function RootLayout() {
             <Stack.Screen name="(provider)" options={{ headerShown: false }} />
             <Stack.Screen name="(admin)" options={{ headerShown: false }} />
           </Stack>
+          <GlobalJobOfferOverlay />
         </NavigationGuard>
       </QueryClientProvider>
     </Provider>

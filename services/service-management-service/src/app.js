@@ -1,3 +1,4 @@
+// Service Management App entrypoint - updated body limits
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");

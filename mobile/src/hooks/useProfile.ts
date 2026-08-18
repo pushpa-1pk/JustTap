@@ -226,6 +226,7 @@ export function useBecomeProvider() {
           accountStatus: data.user.accountStatus,
           isProfileComplete: normalizeProfileCompletion(data.user),
         };
+        await secureStore.saveUser(normalizedUser);
         store.dispatch(setCredentials({ user: normalizedUser, accessToken: data.accessToken }));
       }
       queryClient.invalidateQueries({ queryKey: ['profile'] });
@@ -252,6 +253,7 @@ export function useSwitchRole() {
           accountStatus: data.user.accountStatus,
           isProfileComplete: normalizeProfileCompletion(data.user),
         };
+        await secureStore.saveUser(normalizedUser);
         store.dispatch(setCredentials({ user: normalizedUser, accessToken: data.accessToken }));
       }
     },

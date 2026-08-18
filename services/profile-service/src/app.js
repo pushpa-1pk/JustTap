@@ -1,3 +1,4 @@
+// Profile Service App entrypoint - debug profile update
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -22,6 +23,8 @@ const bankDetailsRoutes = require("./routes/bank-details.routes");
 const adminRoutes = require("./routes/admin.routes");
 const internalRoutes = require("./routes/internal.routes");
 const supportRoutes = require("./routes/support.routes");
+const providerProfileController = require("./controllers/provider-profile.controller");
+const { verifyToken, verifyRole } = require("./middlewares/auth.middleware");
 
 const app = express();
 const uploadsDirectory = path.resolve(__dirname, "..", env.UPLOADS_DIR_NAME);
@@ -62,6 +65,7 @@ app.get("/api/v1/health", (req, res) => {
 app.use("/api/v1/health", healthRoutes);
 app.use("/api/v1/profiles/customer", customerProfileRoutes);
 app.use("/api/v1/profiles/provider", providerProfileRoutes);
+app.get("/api/v1/provider/kyc/requirements", verifyToken, verifyRole(["provider"]), providerProfileController.getKycRequirements);
 app.use("/api/v1/addresses", addressRoutes);
 app.use("/api/v1/provider-services", providerServiceRoutes);
 app.use("/api/v1/documents", documentRoutes);

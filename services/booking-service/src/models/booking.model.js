@@ -7,6 +7,7 @@ const BookingSchema = new mongoose.Schema(
   {
     bookingNumber: { type: String, required: true, unique: true, trim: true },
     customerId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+    idempotencyKey: { type: String, required: true, trim: true, maxlength: 128 },
     providerId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
     serviceId: { type: mongoose.Schema.Types.ObjectId, required: true },
     providerServiceId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
@@ -78,6 +79,7 @@ BookingSchema.pre('validate', function(next) {
 });
 
 BookingSchema.index({ bookingNumber: 1 });
+BookingSchema.index({ customerId: 1, idempotencyKey: 1 }, { unique: true });
 BookingSchema.index({ 'customerAddressSnapshot.location': '2dsphere' });
 BookingSchema.index({ customerId: 1, bookingStatus: 1 });
 BookingSchema.index({ providerId: 1, bookingStatus: 1 });

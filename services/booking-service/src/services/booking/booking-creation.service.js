@@ -64,9 +64,19 @@ class BookingCreationService {
    * Orchestrates the safe instantiation of a fresh booking contract
    */
   async create(actor, dto, session) {
+    const existingBooking = await this.bookingRepo.findByCustomerAndIdempotencyKey(
+      actor.userId,
+      actor.idempotencyKey
+    );
+    if (existingBooking) return existingBooking;
+
     this.validationService.validateSchedulingWindow(dto.scheduledStartTime, dto.scheduledEndTime);
     const customerSnapshot = await this.buildCustomerSnapshot(actor);
-    const { providerOffer } = await this.buildProviderSelection(dto, actor);
+    const { service, providerOffer } = await this.buildProviderSelection(dto, actor);
+
+    if (!service?.isActive) {
+      throw new ApiError('Selected service is no longer available for booking.', 409);
+    }
 
     const resolvedDistanceKm =
       typeof providerOffer.distanceKm === 'number' && Number.isFinite(providerOffer.distanceKm)
@@ -76,12 +86,13 @@ class BookingCreationService {
     const invoice = this.pricingService.calculateInvoice(
       providerOffer.price,
       resolvedDistanceKm,
-      { couponCode: dto.couponCode, couponDiscountAmount: dto.couponDiscountAmount }
+      {}
     );
 
     const bookingPayload = {
       bookingNumber: generateBookingNumber(),
       customerId: actor.userId,
+      idempotencyKey: actor.idempotencyKey,
       providerId: providerOffer.providerId,
       serviceId: dto.serviceId,
       providerServiceId: dto.providerServiceId,
@@ -89,7 +100,10 @@ class BookingCreationService {
       bookingStatus: BOOKING_STATUS.PENDING_PROVIDER_RESPONSE,
       paymentStatus: PAYMENT_STATUS.PENDING,
       scheduledStartTime: dto.scheduledStartTime,
-      scheduledEndTime: dto.scheduledEndTime,
+      // Service duration is authoritative. Ignore a client-provided end time.
+      scheduledEndTime: new Date(
+        new Date(dto.scheduledStartTime).getTime() + Number(service.estimatedDuration) * 60 * 1000
+      ),
       customerSnapshot,
       providerSnapshot: {
         businessName: providerOffer.providerName || null,

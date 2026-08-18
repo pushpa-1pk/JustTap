@@ -86,16 +86,8 @@ class CategoryService {
       throw new ApiError(404, "Category not found.");
     }
 
-    const serviceCount = await serviceRepository.countByCategoryId(id, {
-      includeInactive: true,
-    });
-
-    if (serviceCount > 0) {
-      throw new ApiError(
-        409,
-        "Cannot delete category while services are linked to it."
-      );
-    }
+    // Cascade soft-delete: deactivate all associated services
+    await serviceRepository.deactivateByCategoryId(id);
 
     const deleted = await categoryRepository.softDelete(id, adminId);
     logger.info("CATEGORY_DELETED", { categoryId: id, adminId });

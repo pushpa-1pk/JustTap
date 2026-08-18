@@ -70,7 +70,10 @@ export default function BookingDetailsScreen() {
     );
   }
 
-  const customerCoords = booking.customerAddressSnapshot?.location?.coordinates || [72.8777, 19.076];
+  const customerCoords = booking.customerAddressSnapshot?.location?.coordinates;
+  if (!customerCoords || customerCoords.length !== 2) {
+    return <View style={[styles.center, { backgroundColor: colors.background }]}><Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>This booking has no valid service location.</Text></View>;
+  }
   const mapLat = liveCoords?.latitude || customerCoords[1];
   const mapLng = liveCoords?.longitude || customerCoords[0];
   const currentStepIndex = steps.findIndex((step) => step.key === booking.status);

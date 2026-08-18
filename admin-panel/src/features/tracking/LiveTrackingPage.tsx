@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useSocket } from '../../hooks/useSocket';
+import { useGetBookingsListQuery } from '../../redux/slices/adminApi';
 import { 
   MapPin, Navigation, Compass, Gauge, 
   Map as MapIcon, RefreshCw, Radio, ShieldCheck, Clock
@@ -8,7 +9,27 @@ import {
 declare const L: any; // Allow Leaflet global usage
 
 export default function LiveTrackingPage() {
-  const [activeBookingId, setActiveBookingId] = useState<string>('book_001');
+  const { data: bookingsResponse } = useGetBookingsListQuery({ page: 1, limit: 10 });
+  const bookings = bookingsResponse?.bookings || [];
+
+  const [activeBookingId, setActiveBookingId] = useState<string>('');
+  
+  useEffect(() => {
+    if (bookings.length > 0 && !activeBookingId) {
+      setActiveBookingId(bookings[0]._id);
+    }
+  }, [bookings, activeBookingId]);
+
+  const activeBooking = bookings.find((b: any) => b._id === activeBookingId);
+  const customerName = activeBooking?.customerName || activeBooking?.customerAddressSnapshot?.name || 'Customer';
+  const providerName = activeBooking?.provider?.businessName || activeBooking?.providerName || 'Provider';
+
+  const customerCoords: [number, number] = activeBooking?.customerAddressSnapshot?.location?.coordinates
+    ? [activeBooking.customerAddressSnapshot.location.coordinates[1], activeBooking.customerAddressSnapshot.location.coordinates[0]]
+    : [19.0760, 72.8777]; // Fallback to Mumbai Center
+
+  const providerStartCoords: [number, number] = [customerCoords[0] - 0.016, customerCoords[1] - 0.017];
+
   const [telemetry, setTelemetry] = useState<any>({
     speed: 0,
     eta: 12,
@@ -24,13 +45,8 @@ export default function LiveTrackingPage() {
   const customerMarkerRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
 
-  // Hardcoded coordinate points for simulation
-  const customerCoords: [number, number] = [19.0760, 72.8777]; // Mumbai Center
-  const providerStartCoords: [number, number] = [19.0600, 72.8600]; // Mumbai South
-
   // Load Leaflet CDN script and stylesheet dynamically
   useEffect(() => {
-    // 1. Append Leaflet CSS if not already present
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
       link.id = 'leaflet-css';
@@ -39,26 +55,34 @@ export default function LiveTrackingPage() {
       document.head.appendChild(link);
     }
 
-    // 2. Append Leaflet JS if not already present
     if (!document.getElementById('leaflet-js')) {
       const script = document.createElement('script');
       script.id = 'leaflet-js';
       script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
       script.async = true;
-      script.onload = () => initLeafletMap();
+      script.onload = () => {
+        if (mapRef.current) {
+          mapRef.current.remove();
+          mapRef.current = null;
+        }
+        initLeafletMap();
+      };
       document.body.appendChild(script);
     } else {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
       initLeafletMap();
     }
 
     return () => {
-      // Clean up map instance on unmount
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
       }
     };
-  }, []);
+  }, [activeBookingId, bookingsResponse]);
 
   const initLeafletMap = () => {
     if (mapRef.current || typeof L === 'undefined') return;
@@ -83,13 +107,13 @@ export default function LiveTrackingPage() {
     // Plot customer static marker
     customerMarkerRef.current = L.marker(customerCoords, { icon: customIcon('#6366f1') })
       .addTo(map)
-      .bindPopup('Customer Location: Anita Sharma')
+      .bindPopup(`Customer Location: ${customerName}`)
       .openPopup();
 
     // Plot provider dynamic starting marker
     providerMarkerRef.current = L.marker(providerStartCoords, { icon: customIcon('#10b981') })
       .addTo(map)
-      .bindPopup('Provider Location: Fast Electric Works');
+      .bindPopup(`Provider Location: ${providerName}`);
 
     // Draw route vector line
     routeLineRef.current = L.polyline([providerStartCoords, customerCoords], { color: '#6366f1', weight: 4, opacity: 0.7 })
@@ -213,37 +237,35 @@ export default function LiveTrackingPage() {
         <div className="lg:col-span-1 flex flex-col gap-3 overflow-y-auto">
           <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Active Tracking Rooms</span>
           
-          <button
-            onClick={() => setActiveBookingId('book_001')}
-            className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
-              activeBookingId === 'book_001'
-                ? 'bg-primary/5 border-primary shadow-sm'
-                : 'bg-card border-border hover:bg-secondary/40'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="font-bold text-xs text-muted-foreground uppercase font-mono">Booking: #JT-9028</span>
-              <span className="text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded">En Route</span>
+          {bookings.length === 0 ? (
+            <div className="p-4 text-xs text-muted-foreground text-center bg-secondary/20 rounded-xl border border-border">
+              No active tracking rooms found in database
             </div>
-            <h4 className="font-bold font-heading mt-2">Ramesh Kumar (AC Repair)</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Customer: Anita Sharma</p>
-          </button>
-
-          <button
-            onClick={() => setActiveBookingId('book_002')}
-            className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
-              activeBookingId === 'book_002'
-                ? 'bg-primary/5 border-primary shadow-sm'
-                : 'bg-card border-border hover:bg-secondary/40'
-            }`}
-          >
-            <div className="flex justify-between items-start">
-              <span className="font-bold text-xs text-muted-foreground uppercase font-mono">Booking: #JT-9029</span>
-              <span className="text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded">Matching</span>
-            </div>
-            <h4 className="font-bold font-heading mt-2">Unassigned Plumber</h4>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Customer: Rohan Mehra</p>
-          </button>
+          ) : (
+            bookings.map((b: any) => {
+              const bCustomerName = b.customerName || b.customerAddressSnapshot?.name || 'Customer';
+              const bCategoryName = b.serviceName || b.serviceCategoryName || 'Service Job';
+              const isSelected = activeBookingId === b._id;
+              return (
+                <button
+                  key={b._id}
+                  onClick={() => setActiveBookingId(b._id)}
+                  className={`p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-primary/5 border-primary shadow-sm'
+                      : 'bg-card border-border hover:bg-secondary/40'
+                  }`}
+                >
+                  <div className="flex justify-between items-start">
+                    <span className="font-bold text-xs text-muted-foreground uppercase font-mono">Booking: #{b.bookingNumber || b._id.substring(18)}</span>
+                    <span className="text-[10px] font-bold bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded">{b.bookingStatus}</span>
+                  </div>
+                  <h4 className="font-bold font-heading mt-2">{bCategoryName}</h4>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Customer: {bCustomerName}</p>
+                </button>
+              );
+            })
+          )}
         </div>
 
         {/* Center/Right pane: Map & Telemetry Indicators */}

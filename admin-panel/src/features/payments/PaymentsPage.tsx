@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
-  useTriggerClawbackRefundMutation 
+  useTriggerClawbackRefundMutation,
+  useGetTransactionsListQuery
 } from '../../redux/slices/adminApi';
 import { 
   Search, ShieldAlert, CheckCircle, Ban, 
@@ -21,48 +22,7 @@ export default function PaymentsPage() {
   // Mutation
   const [triggerRefund, { isLoading: isRefundtLoading }] = useTriggerClawbackRefundMutation();
 
-  // Mock transactions list
-  const mockTransactions = [
-    {
-      _id: 'tx_901',
-      paymentId: 'pay_razorpay_9021',
-      bookingNumber: 'JT-2026-9028',
-      amount: 599,
-      gatewayResponse: 'CAPTURED',
-      commission: 100,
-      tax: 50,
-      settled: true,
-      createdAt: '2026-08-07T12:00:00.000Z',
-      providerName: 'Fast Electric Works',
-      customerName: 'Anita Sharma'
-    },
-    {
-      _id: 'tx_902',
-      paymentId: 'pay_razorpay_9022',
-      bookingNumber: 'JT-2026-9029',
-      amount: 439,
-      gatewayResponse: 'REFUNDED',
-      commission: 80,
-      tax: 40,
-      settled: false,
-      createdAt: '2026-08-06T14:30:00.000Z',
-      providerName: 'Unassigned Plumber',
-      customerName: 'Rohan Mehra'
-    },
-    {
-      _id: 'tx_903',
-      paymentId: 'pay_razorpay_9023',
-      bookingNumber: 'JT-2026-9030',
-      amount: 899,
-      gatewayResponse: 'FAILED',
-      commission: 180,
-      tax: 80,
-      settled: false,
-      createdAt: '2026-08-05T09:15:00.000Z',
-      providerName: 'Super Plumbing Services',
-      customerName: 'Vikram Singh'
-    }
-  ];
+  const { data: transactions = [], isLoading } = useGetTransactionsListQuery();
 
   const handleRefund = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,7 +91,7 @@ export default function PaymentsPage() {
     win.document.close();
   };
 
-  const filteredList = mockTransactions.filter((tx) => {
+  const filteredList = transactions.filter((tx: any) => {
     const matchesSearch = 
       tx.paymentId.toLowerCase().includes(searchTerm.toLowerCase()) ||
       tx.bookingNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||

@@ -1,1166 +1,1570 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
+  ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
+  StyleSheet,
+  Text,
   TextInput,
-  Image,
+  View,
+  Modal,
   Dimensions,
-  FlatList,
-  Animated,
   Platform,
-  ActivityIndicator,
-  Modal
+  Animated,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useTheme } from '@/hooks/useTheme';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import {
-  useGetCategoriesQuery,
-  useGetServicesQuery,
-  useGetProvidersForServiceQuery
-} from '@/redux/api/serviceApi';
+import { useTheme } from '@/hooks/useTheme';
+import { useDebounce } from '@/hooks/useDebounce';
 import { useGetCustomerProfile } from '@/hooks/useProfile';
-import { useSearchProvidersMatchingMutation } from '@/redux/api/matchingApi';
-import Shimmer from '@/components/common/Shimmer';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getClayIcon } from '@/utils/iconMapper';
+import {
+  ServiceItem,
+  useGetCategoriesQuery,
+  useGetServiceByIdQuery,
+  useGetServicesQuery,
+  useGetProvidersForServiceQuery,
+} from '@/redux/api/serviceApi';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const GRID = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 32,
-  radiusCard: 20,
+// Premium Category Icon Emojis & Palette mapping for modern, Apple-inspired card designs
+const CATEGORY_ICONS: Record<string, string> = {
+  electrician: '⚡',
+  plumber: '🚿',
+  'ac repair': '❄️',
+  carpenter: '🪚',
+  cleaning: '🧹',
+  salon: '💇',
+  'pet care': '🐶',
+  'tv repair': '📺',
+  painting: '🎨',
+  'pest control': '🐜',
+  'appliance repair': '🔌',
+  'cctv installation': '📹',
 };
 
-const BRAND_COLORS = {
-  background: '#FFFFFF',
-  secondaryBg: '#FFF9F0',
-  primary: '#16A34A', // Green Action / Success
-  accent: '#FBBF24', // Yellow Accent
-  darkText: '#0F172A',
-  secondaryText: '#64748B',
-  divider: '#E5E7EB',
+const CATEGORY_COLORS: Record<string, string> = {
+  electrician: '#FFFBEB', // Light Warm Amber
+  plumber: '#EFF6FF', // Light Blue
+  'ac repair': '#F0F9FF', // Sky Blue
+  carpenter: '#FAF8F5', // Creamy Wood
+  cleaning: '#F0FDF4', // Emerald Ice
+  salon: '#FDF2F8', // Rose Petal
+  'pet care': '#FFF7ED', // Peach Pulp
+  'tv repair': '#FEF2F2', // Soft Red
+  painting: '#FAF5FF', // Lavender Mist
+  'pest control': '#F1F5F9', // Steel Ice
+  'appliance repair': '#F0FDFA', // Mint Mist
+  'cctv installation': '#F8FAFC', // Slate Glaze
 };
 
-// Premium press-to-scale component
-const ScalePressable = ({ onPress, style, children, disabled }: any) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-
-  const handlePressIn = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 0.96,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const handlePressOut = () => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      friction: 4,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  return (
-    <Pressable
-      disabled={disabled}
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        if (onPress) onPress();
-      }}
-      style={style}
-    >
-      <Animated.View style={{ transform: [{ scale: scaleAnim }], width: '100%', alignItems: 'center', justifyContent: 'center' }}>
-        {children}
-      </Animated.View>
-    </Pressable>
-  );
-};
+interface Filters {
+  minPrice?: number;
+  maxPrice?: number;
+  minExperience?: number;
+  minRating?: number;
+  sortBy: string;
+}
 
 export default function CustomerSearchScreen() {
-  const { typography, colors } = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ query?: string }>();
+  const params = useLocalSearchParams<{ query?: string; categoryId?: string; serviceId?: string }>();
+  const { colors, typography, spacing, isDark } = useTheme();
 
-  // RTK Query Hooks for Backend Microservices
-  const { data: profileRes } = useGetCustomerProfile();
-  const { data: categoriesRes, isLoading: isCategoriesLoading } = useGetCategoriesQuery();
-  const { data: servicesRes, isLoading: isServicesLoading } = useGetServicesQuery();
+  // Search and selection states
+  const [input, setInput] = useState(params.query ?? '');
+  const [activeKeyword, setActiveKeyword] = useState('');
+  const [selectedService, setSelectedService] = useState<ServiceItem | null>(null);
+  const [showAllCategories, setShowAllCategories] = useState(false);
 
-  const profile = profileRes?.profile;
-  const addresses = profileRes?.addresses || [];
-  const primaryAddress = addresses.find(a => a.isPrimary) || addresses[0];
+  // Persistence/History states (session-persisted)
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [favorites, setFavorites] = useState<Record<string, boolean>>({});
 
-  const dbCategories = categoriesRes?.data || [];
-  const dbServices = servicesRes?.data || [];
-
-  // Search keyword & view states
-  const [keyword, setKeyword] = useState(params.query || '');
-  const [devState, setDevState] = useState<'discovery' | 'results' | 'empty' | 'loading' | 'voice'>('discovery');
-  const [isDevMenuOpen, setIsDevMenuOpen] = useState(false);
-  const [favorites, setFavorites] = useState<string[]>([]);
-
-  // Autocomplete Suggestions
-  const [isFocused, setIsFocused] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [recentSearches, setRecentSearches] = useState(['Electrician', 'AC Repair', 'Plumber']);
-
-  // Filters Modal State
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<'distance' | 'rating' | 'price' | 'experience'>('distance');
-  const [maxDistance, setMaxDistance] = useState(8); // km
-  const [maxPrice, setMaxPrice] = useState(1000); // INR
-  const [minRating, setMinRating] = useState<number | null>(null);
-  const [minExp, setMinExp] = useState<number | null>(null);
-  const [emergencyOnly, setEmergencyOnly] = useState(false);
-  const [verifiedOnly, setVerifiedOnly] = useState(false);
-  const [availability, setAvailability] = useState<'ANY' | 'NOW' | 'TODAY'>('ANY');
-
-  // Voice Search Listening Overlay Mockup
-  const [isVoiceListening, setIsVoiceListening] = useState(false);
-
-  // Sync route params query to keyword state
+  // Load recent searches from AsyncStorage on mount
   useEffect(() => {
-    if (params.query) {
-      setKeyword(params.query);
-      setDevState('results');
+    const loadRecentSearches = async () => {
+      try {
+        const stored = await AsyncStorage.getItem('justtap_recent_searches');
+        if (stored) {
+          setRecentSearches(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.error('Failed to load recent searches:', e);
+      }
+    };
+    loadRecentSearches();
+  }, []);
+
+  const saveRecentSearches = async (newList: string[]) => {
+    try {
+      await AsyncStorage.setItem('justtap_recent_searches', JSON.stringify(newList));
+    } catch (e) {
+      console.error('Failed to save recent searches:', e);
+    }
+  };
+
+  // Overlay Modals
+  const [isFilterVisible, setIsFilterVisible] = useState(false);
+  const [isVoiceVisible, setIsVoiceVisible] = useState(false);
+
+  // Filters State
+  const [filters, setFilters] = useState<Filters>({
+    sortBy: 'distance',
+  });
+  
+  // Staging filters inside bottom sheet
+  const [tempFilters, setTempFilters] = useState<Filters>({
+    sortBy: 'distance',
+  });
+
+  // Debounced input keyword search
+  const debouncedKeyword = useDebounce(input.trim().replace(/\s+/g, ' '), 300);
+
+  // Sync params query updates
+  useEffect(() => {
+    if (params.query !== undefined) {
+      setInput(params.query);
+      setActiveKeyword(params.query);
     }
   }, [params.query]);
 
-  // Resolve matching service in database based on search keyword
-  const matchedService = useMemo(() => {
-    if (!keyword.trim()) return null;
-    const query = keyword.toLowerCase();
-    return dbServices.find(s => 
-      s.name.toLowerCase().includes(query) || 
-      s.slug.toLowerCase().includes(query)
-    );
-  }, [keyword, dbServices]);
+  // Sync debounced input
+  useEffect(() => {
+    setActiveKeyword(debouncedKeyword);
+  }, [debouncedKeyword]);
 
-  // Query providers near user's GPS coords from database using selected service and active filters
-  const { data: providersRes, isLoading: isProvidersLoading } = useGetProvidersForServiceQuery(
-    {
-      serviceId: matchedService?._id || 'demo-service-id', // Fallback ID if none matches to keep typing happy
-      latitude: primaryAddress?.latitude || 19.066,
-      longitude: primaryAddress?.longitude || 72.825,
-      minPrice: undefined,
-      maxPrice,
-      minExperience: minExp || undefined,
-      minRating: minRating || undefined,
-      sortBy: sortBy === 'rating' ? 'rating' : sortBy === 'price' ? 'price' : sortBy === 'experience' ? 'experience' : 'distance',
-      sortOrder: sortBy === 'price' ? 'asc' : 'desc'
-    },
-    {
-      skip: !matchedService || devState === 'discovery' // Skip query if no database service matches keyword
+  // Backend queries
+  const profileQuery = useGetCustomerProfile();
+  const categoriesQuery = useGetCategoriesQuery();
+  
+  // Determine active categoryId context
+  const categoryId = typeof params.categoryId === 'string' ? params.categoryId : undefined;
+  
+  const servicesQuery = useGetServicesQuery({
+    categoryId,
+    keyword: categoryId ? undefined : activeKeyword || undefined,
+  });
+
+  // Fetch service if passed explicitly as serviceId
+  const routeServiceId = typeof params.serviceId === 'string' ? params.serviceId : undefined;
+  const serviceByIdQuery = useGetServiceByIdQuery(routeServiceId ?? '', { skip: !routeServiceId });
+
+  // Resolve service selection automatically if routeServiceId is loaded
+  useEffect(() => {
+    if (routeServiceId && serviceByIdQuery.data?.data) {
+      const srv = serviceByIdQuery.data.data;
+      setSelectedService(srv);
+      setInput(srv.name);
+      router.setParams({ serviceId: undefined });
     }
+  }, [routeServiceId, serviceByIdQuery.data]);
+
+  // Resolve active primary customer location address
+  const address = useMemo(() => {
+    return (
+      profileQuery.data?.addresses?.find((item) => item.isPrimary) ||
+      profileQuery.data?.addresses?.[0]
+    );
+  }, [profileQuery.data]);
+
+  // Resolve matching lists
+  const categories = useMemo(() => categoriesQuery.data?.data ?? [], [categoriesQuery.data]);
+  const services = useMemo(() => servicesQuery.data?.data?.filter((item) => item.isActive) ?? [], [servicesQuery.data]);
+
+  // Load nearby providers query once service and address are active
+  const providersQuery = useGetProvidersForServiceQuery(
+    {
+      serviceId: selectedService?._id ?? '',
+      latitude: address?.latitude ?? 0,
+      longitude: address?.longitude ?? 0,
+      minPrice: filters.minPrice,
+      maxPrice: filters.maxPrice,
+      minExperience: filters.minExperience,
+      minRating: filters.minRating,
+      sortBy: filters.sortBy,
+    },
+    { skip: !selectedService || !address }
   );
 
-  const dbProviders = providersRes?.data?.providers || [];
+  const providers = useMemo(() => providersQuery.data?.data?.providers ?? [], [providersQuery.data]);
 
-  // Real-time matching microservice query
-  const [searchMatchingProviders, { data: matchingProvidersRes, isLoading: isMatchingLoading }] = useSearchProvidersMatchingMutation();
-  const matchingProviders = matchingProvidersRes?.data?.providers || [];
+  // Animation values
+  const pulseAnim = React.useRef(new Animated.Value(1)).current;
+  const voiceWaveAnim = React.useRef(new Animated.Value(0)).current;
 
-  // Trigger matching microservice search whenever selected service, address, or distance radius updates
+  // Pulse animation loop for skeleton cards & voice waves
   useEffect(() => {
-    if (matchedService?._id) {
-      searchMatchingProviders({
-        latitude: primaryAddress?.latitude || 19.066,
-        longitude: primaryAddress?.longitude || 72.825,
-        radius: maxDistance,
-        serviceId: matchedService._id
-      }).catch(err => console.error("Matching service error:", err));
-    }
-  }, [matchedService, primaryAddress, maxDistance]);
-
-  // Mock Fallback Data (for visual completeness and when backend is not actively running)
-  const fallbackCategories = [
-    { name: 'Electrician', icon: 'flash', price: '₹199', eta: '10 mins' },
-    { name: 'Plumber', icon: 'water', price: '₹249', eta: '12 mins' },
-    { name: 'AC Repair', icon: 'snow', price: '₹399', eta: '15 mins' },
-    { name: 'Carpenter', icon: 'hammer', price: '₹299', eta: '20 mins' },
-    { name: 'Cleaning', icon: 'brush', price: '₹499', eta: '25 mins' },
-    { name: 'Salon', icon: 'cut', price: '₹599', eta: '30 mins' },
-    { name: 'Pet Care', icon: 'paw', price: '₹349', eta: '18 mins' },
-    { name: 'TV Repair', icon: 'tv', price: '₹199', eta: '15 mins' }
-  ];
-
-  const fallbackProviders = [
-    { id: 'prov-1', name: 'Ravi Sharma', service: 'Electrician', rating: 4.9, completed: 840, dist: 1.2, eta: 8, price: 199, img: 'https://images.unsplash.com/photo-1540569014015-19a7be504e3a?w=150', online: true, verified: true },
-    { id: 'prov-2', name: 'Vikram Singh', service: 'AC Repair', rating: 4.8, completed: 320, dist: 2.1, eta: 10, price: 399, img: 'https://images.unsplash.com/photo-1628157582853-a796fa650a6a?w=150', online: true, verified: true },
-    { id: 'prov-3', name: 'Amit Plumber', service: 'Plumber', rating: 4.75, completed: 490, dist: 1.6, eta: 12, price: 249, img: 'https://images.unsplash.com/photo-1599566150163-29194dcaad36?w=150', online: false, verified: true }
-  ];
-
-  const trendingServices = [
-    { title: 'Sofa Shampooing', price: '₹799', img: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=300', badge: '50% OFF' },
-    { title: 'Kitchen Deep Cleaning', price: '₹1499', img: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=300', badge: 'Trending' }
-  ];
-
-  // Combine database providers, matching service providers and fallback providers
-  const displayProviders = useMemo(() => {
-    if (devState === 'empty') return [];
-    if (keyword.trim().length > 0) {
-      // 1. Prioritize results returned from the real-time matching microservice
-      if (matchingProviders.length > 0) {
-        return matchingProviders.map(p => ({
-          id: p.userId, // MatchingProviderResult uses userId
-          name: p.businessName,
-          service: matchedService?.name || 'Home Service',
-          rating: p.rating || 4.8,
-          completed: p.experience * 35 || 120,
-          dist: Number(p.distance.toFixed(1)),
-          eta: Math.round(p.distance * 8) || 10,
-          price: p.price,
-          img: fallbackProviders[Math.floor(Math.random() * fallbackProviders.length)].img,
-          online: true,
-          verified: true
-        }));
-      }
-
-      // 2. Fall back to standard catalog providers
-      if (dbProviders.length > 0) {
-        return dbProviders.map(p => ({
-          id: p.providerId,
-          name: p.businessName,
-          service: matchedService?.name || 'Home Service',
-          rating: p.rating || 4.8,
-          completed: Math.floor(p.rating * 100),
-          dist: Number(p.distance.toFixed(1)),
-          eta: Math.round(p.distance * 8),
-          price: p.price,
-          img: fallbackProviders[Math.floor(Math.random() * fallbackProviders.length)].img,
-          online: true,
-          verified: true
-        }));
-      }
-      
-      // 3. Fall back to visual mock search filters
-      const query = keyword.toLowerCase();
-      return fallbackProviders.filter(p => 
-        p.name.toLowerCase().includes(query) || 
-        p.service.toLowerCase().includes(query)
+    let animLoop: Animated.CompositeAnimation | null = null;
+    if (isVoiceVisible || categoriesQuery.isLoading || servicesQuery.isLoading) {
+      animLoop = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 0.5, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ])
       );
-    }
-    return fallbackProviders;
-  }, [keyword, dbProviders, matchingProviders, matchedService, devState]);
-
-  // Autocomplete matching list
-  const handleKeywordChange = (text: string) => {
-    setKeyword(text);
-    if (!text.trim()) {
-      setSuggestions([]);
-      if (devState === 'results') setDevState('discovery');
+      animLoop.start();
     } else {
-      const query = text.toLowerCase();
-      const activeList = dbServices.length > 0 ? dbServices : fallbackCategories;
-      const catMatches = activeList.map(c => c.name);
-      const matches = catMatches.filter(name => name.toLowerCase().includes(query));
-      setSuggestions(matches.length > 0 ? matches : ['Electrician Near Me', 'AC Servicing', 'Plumbing leakage']);
+      pulseAnim.setValue(1);
     }
-  };
+    return () => animLoop?.stop();
+  }, [isVoiceVisible, categoriesQuery.isLoading, servicesQuery.isLoading]);
 
-  const handleSelectKeyword = (query: string) => {
-    setKeyword(query);
-    setIsFocused(false);
-    setDevState('results');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // Save to recent searches
-    if (!recentSearches.includes(query)) {
-      setRecentSearches([query, ...recentSearches.slice(0, 4)]);
+  // Voice search mock simulation wave
+  useEffect(() => {
+    let voiceWave: Animated.CompositeAnimation | null = null;
+    if (isVoiceVisible) {
+      voiceWave = Animated.loop(
+        Animated.sequence([
+          Animated.timing(voiceWaveAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+          Animated.timing(voiceWaveAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
+        ])
+      );
+      voiceWave.start();
+    } else {
+      voiceWaveAnim.setValue(0);
     }
-  };
+    return () => voiceWave?.stop();
+  }, [isVoiceVisible]);
 
-  const handleDeleteRecent = (searchItem: string) => {
+  // Refetch helper
+  const handleRetry = useCallback(async () => {
+    try {
+      await Promise.all([
+        categoriesQuery.refetch(),
+        servicesQuery.refetch(),
+        profileQuery.refetch(),
+        providersQuery.refetch(),
+      ]);
+    } catch (e) {
+      console.warn(e);
+    }
+  }, [categoriesQuery, servicesQuery, profileQuery, providersQuery]);
+
+  // Save selection query to history
+  const handleServiceSelect = (service: ServiceItem) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setRecentSearches(recentSearches.filter(s => s !== searchItem));
+    setSelectedService(service);
+    setInput(service.name);
+    // Add to history without duplicates
+    const updated = [service.name, ...recentSearches.filter((s) => s !== service.name)].slice(0, 5);
+    setRecentSearches(updated);
+    saveRecentSearches(updated);
   };
 
-  const handleFavoriteToggle = (id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (favorites.includes(id)) {
-      setFavorites(favorites.filter(favId => favId !== id));
-    } else {
-      setFavorites([...favorites, id]);
+  const handleRecentSearchSelect = (queryText: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setInput(queryText);
+    setActiveKeyword(queryText);
+    const matched = services.find((s) => s.name.toLowerCase() === queryText.toLowerCase());
+    if (matched) {
+      setSelectedService(matched);
     }
+    const updated = [queryText, ...recentSearches.filter((s) => s !== queryText)].slice(0, 5);
+    setRecentSearches(updated);
+    saveRecentSearches(updated);
   };
 
-  const handleVoiceTrigger = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setIsVoiceListening(true);
+  const handleRecentSearchDelete = (queryText: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const updated = recentSearches.filter((s) => s !== queryText);
+    setRecentSearches(updated);
+    saveRecentSearches(updated);
+  };
+
+  const handleClearAllRecents = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRecentSearches([]);
+    saveRecentSearches([]);
+  };
+
+  // Trigger simulated voice search callback
+  const handleVoiceSearchStart = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsVoiceVisible(true);
+    // Simulate voice listening & auto-resolve to plumber after 2.5 seconds
     setTimeout(() => {
-      setIsVoiceListening(false);
-      handleSelectKeyword('Electrician');
+      setIsVoiceVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setInput('Plumber');
+      setActiveKeyword('Plumber');
+      const plumbingService = services.find((s) => s.name.toLowerCase().includes('plumb'));
+      if (plumbingService) {
+        setSelectedService(plumbingService);
+      }
     }, 2500);
   };
 
-  // State Switcher Layout Renderers
-  if (devState === 'loading' || isCategoriesLoading || isServicesLoading) {
-    return (
-      <View style={[styles.container, { backgroundColor: BRAND_COLORS.background }]}>
-        <View style={styles.searchHeader}>
-          <Shimmer width={'75%'} height={48} borderRadius={14} />
-          <Shimmer width={48} height={48} borderRadius={14} style={{ marginLeft: 12 }} />
-        </View>
-        <ScrollView style={{ padding: GRID.lg }}>
-          <Shimmer width={200} height={20} borderRadius={4} />
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Shimmer key={i} width={'48%'} height={100} borderRadius={16} />
-            ))}
-          </View>
-        </ScrollView>
-        {renderDevMenu()}
-      </View>
-    );
-  }
+  // Filter application handler
+  const handleOpenFilters = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTempFilters({ ...filters });
+    setIsFilterVisible(true);
+  };
 
-  // --- Normal/Discovery/Results Screen Render ---
+  const handleApplyFilters = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setFilters({ ...tempFilters });
+    setIsFilterVisible(false);
+  };
+
+  const handleResetFilters = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const defaults = { sortBy: 'distance' };
+    setFilters(defaults);
+    setTempFilters(defaults);
+    setIsFilterVisible(false);
+  };
+
+  const toggleFavorite = (providerId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setFavorites((prev) => ({ ...prev, [providerId]: !prev[providerId] }));
+  };
+
+  const handleClearSelection = () => {
+    setSelectedService(null);
+    setInput('');
+    setActiveKeyword('');
+  };
+
+
+
+  // Resolve random premium avatars based on name hash for high aesthetic fidelity
+  const getAvatarUrl = (name: string) => {
+    const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    const index = (hash % 12) + 1;
+    const gender = hash % 2 === 0 ? 'men' : 'women';
+    return `https://randomuser.me/api/portraits/${gender}/${index}.jpg`;
+  };
+
   return (
-    <View style={{ flex: 1, backgroundColor: BRAND_COLORS.background }}>
-      {/* SEARCH HEADER */}
-      <View style={[styles.searchHeader, { borderBottomColor: BRAND_COLORS.divider }]}>
-        <View style={[styles.searchBarContainer, { backgroundColor: '#F1F5F9' }]}>
-          <Ionicons name="search" size={20} color={BRAND_COLORS.secondaryText} style={styles.searchIcon} />
-          <TextInput
-            style={[styles.searchInput, { color: BRAND_COLORS.darkText }]}
-            placeholder="Search services or providers..."
-            placeholderTextColor={BRAND_COLORS.secondaryText}
-            value={keyword}
-            onFocus={() => setIsFocused(true)}
-            onChangeText={handleKeywordChange}
-          />
-          {keyword.length > 0 && (
-            <Pressable onPress={() => handleKeywordChange('')}>
-              <Ionicons name="close-circle" size={20} color={BRAND_COLORS.secondaryText} style={{ marginRight: 8 }} />
-            </Pressable>
-          )}
-        </View>
-        <ScalePressable style={styles.micBtn} onPress={handleVoiceTrigger}>
-          <Ionicons name="mic-outline" size={22} color={BRAND_COLORS.darkText} />
-        </ScalePressable>
-        <ScalePressable style={styles.filterBtn} onPress={() => setIsFilterOpen(true)}>
-          <Ionicons name="options-outline" size={22} color={BRAND_COLORS.darkText} />
-        </ScalePressable>
-      </View>
+    <SafeAreaViewContainer style={{ backgroundColor: colors.background, paddingTop: 4 }}>
+      {/* 1. Header & Large Search Bar */}
+      <View style={[styles.headerContainer, { borderBottomColor: colors.border }]}>
+        {/* Current Location selection row */}
+        <Pressable
+          onPress={() => router.push('/(customer)/addresses')}
+          style={styles.locationSelector}
+        >
+          <Ionicons name="pin" size={16} color={colors.primary} />
+          <Text style={[typography.bodyMedium, styles.locationText, { color: colors.text }]}>
+            {address?.addressLine1 ? `${address.addressLine1}, ${address.city}` : 'Select Service Address'}
+          </Text>
+          <Ionicons name="chevron-down" size={14} color={colors.textSecondary} />
+        </Pressable>
 
-      {/* Autocomplete Suggestions Overlay */}
-      {isFocused && (
-        <View style={styles.suggestionsContainer}>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            {suggestions.map((item) => (
-              <Pressable
-                key={item}
-                style={styles.suggestionRow}
-                onPress={() => handleSelectKeyword(item)}
-              >
-                <Ionicons name="search-outline" size={16} color={BRAND_COLORS.secondaryText} style={{ marginRight: GRID.sm }} />
-                <Text style={[typography.bodyMedium, { color: BRAND_COLORS.darkText }]}>{item}</Text>
+        {/* Large premium input bar container */}
+        <View style={styles.searchBarRow}>
+          <View style={[styles.searchBarContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Ionicons name="search" size={20} color={colors.textSecondary} />
+            <TextInput
+              value={input}
+              onChangeText={(val) => {
+                setInput(val);
+                if (!val) {
+                  setSelectedService(null);
+                }
+              }}
+              placeholder="Search services or providers..."
+              placeholderTextColor={colors.textSecondary}
+              style={[styles.searchInput, { color: colors.text }]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              onSubmitEditing={() => {
+                const trimmed = input.trim();
+                if (trimmed) {
+                  const updated = [trimmed, ...recentSearches.filter((s) => s !== trimmed)].slice(0, 5);
+                  setRecentSearches(updated);
+                  saveRecentSearches(updated);
+                  setActiveKeyword(trimmed);
+                }
+              }}
+            />
+            {input.length > 0 && (
+              <Pressable onPress={handleClearSelection} style={styles.clearBtn}>
+                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
               </Pressable>
-            ))}
-            <Pressable style={styles.closeOverlayBtn} onPress={() => setIsFocused(false)}>
-              <Text style={[typography.bodyMedium, { color: BRAND_COLORS.primary, fontWeight: '700' }]}>Close Suggestions</Text>
+            )}
+          </View>
+
+          {/* Voice Search mic button */}
+          <Pressable onPress={handleVoiceSearchStart} style={[styles.actionBtn, { backgroundColor: colors.surface }]}>
+            <Ionicons name="mic" size={22} color={colors.primary} />
+          </Pressable>
+
+          {/* Filter settings panel trigger */}
+          <Pressable onPress={handleOpenFilters} style={[styles.actionBtn, { backgroundColor: colors.surface }]}>
+            <Ionicons name="options-outline" size={22} color={colors.text} />
+          </Pressable>
+        </View>
+
+        {/* Dynamic Horizontal Quick Filters Chips when a service is selected */}
+        {selectedService && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterChipsRow}
+          >
+            <Pressable
+              onPress={handleOpenFilters}
+              style={[styles.chipButton, { borderColor: colors.border, backgroundColor: colors.surface }]}
+            >
+              <Ionicons name="funnel-outline" size={13} color={colors.text} />
+              <Text style={[styles.chipText, { color: colors.text }]}>Filters</Text>
             </Pressable>
+            
+            <Pressable
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setFilters(prev => ({ ...prev, sortBy: prev.sortBy === 'distance' ? 'rating' : 'distance' }));
+              }}
+              style={[
+                styles.chipButton,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: filters.sortBy === 'distance' ? colors.background : '#DCFCE7',
+                },
+              ]}
+            >
+              <Text style={[styles.chipText, { color: filters.sortBy === 'distance' ? colors.text : colors.primary }]}>
+                {filters.sortBy === 'distance' ? 'Sort: Distance' : 'Sort: Popularity'}
+              </Text>
+            </Pressable>
+
+            {filters.minRating ? (
+              <Pressable
+                onPress={() => setFilters(prev => ({ ...prev, minRating: undefined }))}
+                style={[styles.chipButton, { borderColor: colors.primary, backgroundColor: '#DCFCE7' }]}
+              >
+                <Text style={[styles.chipText, { color: colors.primary }]}>⭐ {filters.minRating}+ Rating ×</Text>
+              </Pressable>
+            ) : null}
+
+            {filters.maxPrice ? (
+              <Pressable
+                onPress={() => setFilters(prev => ({ ...prev, maxPrice: undefined }))}
+                style={[styles.chipButton, { borderColor: colors.primary, backgroundColor: '#DCFCE7' }]}
+              >
+                <Text style={[styles.chipText, { color: colors.primary }]}>Under ₹{filters.maxPrice} ×</Text>
+              </Pressable>
+            ) : null}
           </ScrollView>
-        </View>
-      )}
-
-      {/* LOCATION BAR */}
-      <View style={[styles.locationBar, { backgroundColor: BRAND_COLORS.secondaryBg }]}>
-        <Ionicons name="location-sharp" size={16} color={BRAND_COLORS.primary} />
-        <Text style={[typography.bodySmall, { color: BRAND_COLORS.darkText, fontWeight: '700', flex: 1, marginLeft: 6 }]} numberOfLines={1}>
-          📍 Delivered to: {primaryAddress?.label?.toUpperCase() || 'HOME'} - {primaryAddress?.addressLine1 || 'Mumbai, Maharashtra'}
-        </Text>
-        <Ionicons name="chevron-down" size={16} color={BRAND_COLORS.darkText} />
+        )}
       </View>
 
-      {/* VIEW CONDITIONAL: Discovery Dashboard vs Results View */}
-      {devState === 'discovery' && keyword.length === 0 ? (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-          {/* RECENT SEARCHES */}
-          {recentSearches.length > 0 && (
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
+        {/* Loading service details from category details redirect */}
+        {routeServiceId && serviceByIdQuery.isLoading && (
+          <View style={styles.feedbackContainer}>
+            <ActivityIndicator color={colors.primary} size="large" />
+            <Text style={[typography.bodyMedium, { color: colors.textSecondary, marginTop: 12 }]}>
+              Loading service details...
+            </Text>
+          </View>
+        )}
+
+        {/* ================================================================ */}
+        {/* CASE A: No Active Keyword & No Selected Service -> Show Dashboard */}
+        {/* ================================================================ */}
+        {!input.trim() && !selectedService && !(routeServiceId && serviceByIdQuery.isLoading) && (
+          <View>
+            {/* Recent Searches */}
+            {recentSearches.length > 0 && (
+              <View style={styles.sectionContainer}>
+                <View style={styles.sectionHeader}>
+                  <Text style={[styles.sectionTitle, { color: colors.text }]}>Recent Searches</Text>
+                  <Pressable onPress={handleClearAllRecents}>
+                    <Text style={[styles.clearAllText, { color: colors.primary }]}>Clear All</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.recentSearchesList}>
+                  {recentSearches.map((item, index) => (
+                    <View key={`${item}-${index}`} style={[styles.recentSearchItem, { borderBottomColor: colors.border }]}>
+                      <Pressable onPress={() => handleRecentSearchSelect(item)} style={styles.recentSearchInfo}>
+                        <Ionicons name="time-outline" size={18} color={colors.textSecondary} style={styles.recentClock} />
+                        <Text style={[typography.bodyMedium, { color: colors.text }]}>{item}</Text>
+                      </Pressable>
+                      <Pressable onPress={() => handleRecentSearchDelete(item)} style={styles.recentSearchRemove}>
+                        <Ionicons name="close" size={16} color={colors.textSecondary} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Popular Searches */}
             <View style={styles.sectionContainer}>
-              <View style={styles.sectionTitleRow}>
-                <Text style={[typography.h3, { color: BRAND_COLORS.darkText }]}>Recent Searches</Text>
-                <Pressable onPress={() => setRecentSearches([])}>
-                  <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, fontWeight: '800' }]}>Clear All</Text>
-                </Pressable>
-              </View>
-              {recentSearches.map((item) => (
-                <View key={item} style={styles.recentItem}>
-                  <Pressable style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => handleSelectKeyword(item)}>
-                    <Ionicons name="time-outline" size={18} color={BRAND_COLORS.secondaryText} style={{ marginRight: GRID.sm }} />
-                    <Text style={[typography.bodyMedium, { color: BRAND_COLORS.darkText }]}>{item}</Text>
-                  </Pressable>
-                  <Pressable onPress={() => handleDeleteRecent(item)}>
-                    <Ionicons name="close" size={18} color={BRAND_COLORS.secondaryText} />
-                  </Pressable>
-                </View>
-              ))}
-            </View>
-          )}
-
-          {/* TRENDING SEARCH CHIPS */}
-          <View style={styles.sectionContainer}>
-            <Text style={[typography.h3, { color: BRAND_COLORS.darkText, marginBottom: GRID.sm }]}>Trending Searches</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-              {['Electrician', 'AC Repair', 'Plumber', 'Cleaning', 'Salon', 'Tutor'].map((chip) => (
-                <Pressable
-                  key={chip}
-                  style={[styles.trendingChip, { borderColor: BRAND_COLORS.divider }]}
-                  onPress={() => handleSelectKeyword(chip)}
-                >
-                  <Ionicons name="trending-up-outline" size={14} color={BRAND_COLORS.primary} style={{ marginRight: 4 }} />
-                  <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>{chip}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* BROWSE SERVICE CATEGORIES */}
-          <View style={styles.sectionContainer}>
-            <Text style={[typography.h3, { color: BRAND_COLORS.darkText, marginBottom: GRID.md }]}>Browse Categories</Text>
-            <View style={styles.categoryGrid}>
-              {(dbCategories.length > 0 ? dbCategories : fallbackCategories).slice(0, 8).map((cat: any) => (
-                <ScalePressable
-                  key={cat.name}
-                  style={[styles.categoryCard, { backgroundColor: '#FFFFFF', borderColor: BRAND_COLORS.divider }]}
-                  onPress={() => handleSelectKeyword(cat.name)}
-                >
-                  <View style={[styles.catIconCircle, { backgroundColor: BRAND_COLORS.secondaryBg }]}>
-                    <Ionicons name={(cat.icon || 'briefcase') as any} size={24} color={BRAND_COLORS.accent} />
-                  </View>
-                  <Text style={[typography.bodySmall, { color: BRAND_COLORS.darkText, fontWeight: '800', marginTop: GRID.sm, textAlign: 'center' }]}>
-                    {cat.name}
-                  </Text>
-                  <Text style={[typography.caption, { color: BRAND_COLORS.primary, fontWeight: '700', marginTop: 2 }]}>
-                    Starting {cat.price || '₹199'}
-                  </Text>
-                </ScalePressable>
-              ))}
-            </View>
-          </View>
-
-          {/* NEARBY PROVIDERS CAROUSEL */}
-          <View style={styles.sectionContainer}>
-            <View style={styles.sectionTitleRow}>
-              <Text style={[typography.h3, { color: BRAND_COLORS.darkText }]}>Nearby Verified Professionals</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-              {fallbackProviders.map((pro) => (
-                <View key={pro.id} style={[styles.proCard, { borderColor: BRAND_COLORS.divider }]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Image source={{ uri: pro.img }} style={styles.proAvatar} />
-                    <View style={{ marginLeft: GRID.sm, flex: 1 }}>
-                      <Text style={[typography.bodyMedium, { color: BRAND_COLORS.darkText, fontWeight: '800' }]} numberOfLines={1}>
-                        {pro.name}
-                      </Text>
-                      <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>
-                        {pro.service} • {pro.dist} km
-                      </Text>
-                    </View>
-                    <View style={styles.verifiedBadge}>
-                      <Ionicons name="checkmark-circle" size={16} color={BRAND_COLORS.primary} />
-                    </View>
-                  </View>
-                  <View style={styles.proMetaRow}>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>★ {pro.rating}</Text>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>ETA {pro.eta} mins</Text>
-                  </View>
-                  <View style={styles.proFooter}>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.primary, fontWeight: '800' }]}>₹{pro.price} onwards</Text>
-                    <ScalePressable
-                      style={[styles.proBookBtn, { backgroundColor: BRAND_COLORS.accent }]}
-                      onPress={() => router.push({
-                        pathname: '/(customer)/provider-details',
-                        params: {
-                          providerId: pro.id,
-                          providerServiceId: pro.id + '-service',
-                          businessName: pro.name,
-                          price: String(pro.price),
-                          rating: String(pro.rating),
-                          experience: '5',
-                          distance: String(pro.dist),
-                          serviceId: 'service',
-                          serviceName: pro.service
-                        }
-                      })}
-                    >
-                      <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>Book</Text>
-                    </ScalePressable>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* TRENDING SERVICES COVER CARDS */}
-          <View style={styles.sectionContainer}>
-            <Text style={[typography.h3, { color: BRAND_COLORS.darkText, marginBottom: GRID.md }]}>Trending Offers</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-              {trendingServices.map((offer) => (
-                <View key={offer.title} style={[styles.offerCard, { borderColor: BRAND_COLORS.divider }]}>
-                  <Image source={{ uri: offer.img }} style={styles.offerImg} />
-                  <View style={styles.offerBadge}>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>{offer.badge}</Text>
-                  </View>
-                  <View style={{ padding: GRID.sm }}>
-                    <Text style={[typography.bodyMedium, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>{offer.title}</Text>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.primary, fontWeight: '800', marginTop: 2 }]}>Starting {offer.price}</Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* RECENTLY VIEWED */}
-          <View style={styles.sectionContainer}>
-            <Text style={[typography.h3, { color: BRAND_COLORS.darkText, marginBottom: GRID.md }]}>Recently Viewed</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 12 }}>
-              {fallbackProviders.slice(1).map((pro) => (
-                <View key={pro.id + '-recent'} style={[styles.recentViewedCard, { borderColor: BRAND_COLORS.divider }]}>
-                  <Image source={{ uri: pro.img }} style={styles.recentViewedImg} />
-                  <View style={{ flex: 1, marginLeft: GRID.sm }}>
-                    <Text style={[typography.bodyMedium, { color: BRAND_COLORS.darkText, fontWeight: '800' }]} numberOfLines={1}>
-                      {pro.name}
-                    </Text>
-                    <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>
-                      {pro.service} • ★{pro.rating}
-                    </Text>
-                  </View>
-                  <ScalePressable
-                    style={[styles.recentBookBtn, { backgroundColor: BRAND_COLORS.accent }]}
-                    onPress={() => handleSelectKeyword(pro.service)}
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>Popular Searches</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.popularRow}>
+                {['Electrician', 'Plumber', 'AC Repair', 'Cleaning', 'Carpenter', 'Salon', 'Pet Care'].map((tag) => (
+                  <Pressable
+                    key={tag}
+                    onPress={() => handleRecentSearchSelect(tag)}
+                    style={[styles.tagChip, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   >
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>Book Again</Text>
-                  </ScalePressable>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-          {renderDevMenu()}
-        </ScrollView>
-      ) : (
-        // --- RESULTS LIST VIEW ---
-        <View style={{ flex: 1 }}>
-          {/* Quick Filter Tags Row */}
-          <View style={styles.quickFilterBar}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 24 }}>
-              <Pressable
-                style={[styles.filterChip, emergencyOnly && { backgroundColor: BRAND_COLORS.secondaryBg, borderColor: BRAND_COLORS.accent }]}
-                onPress={() => setEmergencyOnly(!emergencyOnly)}
-              >
-                <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>
-                  🚨 Emergency {emergencyOnly && '✓'}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.filterChip, verifiedOnly && { backgroundColor: BRAND_COLORS.secondaryBg, borderColor: BRAND_COLORS.accent }]}
-                onPress={() => setVerifiedOnly(!verifiedOnly)}
-              >
-                <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>
-                  🛡️ Verified Only {verifiedOnly && '✓'}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.filterChip, maxDistance <= 5 && { backgroundColor: BRAND_COLORS.secondaryBg, borderColor: BRAND_COLORS.accent }]}
-                onPress={() => setMaxDistance(maxDistance <= 5 ? 15 : 5)}
-              >
-                <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>
-                  ⚡ Under 5km {maxDistance <= 5 && '✓'}
-                </Text>
-              </Pressable>
-            </ScrollView>
-          </View>
+                    <Ionicons name="flame" size={12} color="#EF4444" style={{ marginRight: 4 }} />
+                    <Text style={[styles.tagText, { color: colors.text }]}>{tag}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
 
-          {/* Results List */}
-          {displayProviders.length === 0 ? (
-            // NO RESULTS STATE
-            <View style={styles.emptyContainer}>
-              <View style={[styles.emptyIconCircle, { backgroundColor: BRAND_COLORS.secondaryBg }]}>
-                <Ionicons name="search-outline" size={48} color={BRAND_COLORS.accent} />
-              </View>
-              <Text style={[typography.h2, { color: BRAND_COLORS.darkText, marginTop: GRID.xl, fontWeight: '800' }]}>
-                No providers found nearby
-              </Text>
-              <Text style={[typography.bodyMedium, { color: BRAND_COLORS.secondaryText, marginTop: GRID.sm, textAlign: 'center', paddingHorizontal: 32, lineHeight: 22 }]}>
-                We couldn't locate any service providers within your current range ({maxDistance} km). Try expanding search radius.
-              </Text>
-              <View style={{ width: '100%', paddingHorizontal: 24, marginTop: GRID.xl, gap: 12 }}>
-                <ScalePressable
-                  style={[styles.emptyActionBtn, { backgroundColor: BRAND_COLORS.accent }]}
-                  onPress={() => {
-                    setMaxDistance(15);
-                    setDevState('results');
-                  }}
-                >
-                  <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
-                    Expand Radius (15 km)
+            {/* Browse Categories Grid */}
+            <View style={styles.sectionContainer}>
+              <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>Browse Categories</Text>
+              {categoriesQuery.isLoading ? (
+                <View style={styles.gridLoader}>
+                  <ActivityIndicator color={colors.primary} />
+                </View>
+              ) : categories.length ? (
+                <View style={styles.categoryGrid}>
+                  {(() => {
+                    const activeCats = categories.filter((item) => item.isActive);
+                    const needsLimit = activeCats.length > 6;
+                    const visibleCats = needsLimit && !showAllCategories 
+                      ? activeCats.slice(0, 5) 
+                      : activeCats;
+
+                    const rendered = visibleCats.map((category) => {
+                      const clayIcon = getClayIcon(category.slug) || getClayIcon(category.icon) || getClayIcon(category.name);
+                      return (
+                        <Pressable
+                          key={category._id}
+                          disabled={categoriesQuery.isLoading}
+                          onPress={() => router.push({ pathname: '/(customer)/category-details', params: { categoryId: category._id } })}
+                          style={styles.categoryCard}
+                        >
+                          <View style={[styles.categoryIconContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F5F5F7' }]}>
+                            {(category.icon?.startsWith('http') || category.icon?.startsWith('data:image')) ? (
+                              <Image source={{ uri: category.icon }} style={styles.categoryImage} />
+                            ) : clayIcon ? (
+                              <Image source={clayIcon} style={styles.categoryImage} />
+                            ) : (
+                              <Ionicons 
+                                name={(category.icon || 'help-outline') as any} 
+                                size={28} 
+                                color={isDark ? colors.secondary : '#16A34A'} 
+                              />
+                            )}
+                          </View>
+                          <Text numberOfLines={2} style={[styles.categoryText, { color: colors.text }]}>{category.name}</Text>
+                        </Pressable>
+                      );
+                    });
+
+                    if (needsLimit) {
+                      if (!showAllCategories) {
+                        rendered.push(
+                          <Pressable
+                            key="more-categories"
+                            onPress={() => setShowAllCategories(true)}
+                            style={styles.categoryCard}
+                          >
+                            <View style={[styles.categoryIconContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F5F5F7' }]}>
+                              <Ionicons name="apps-outline" size={28} color={isDark ? colors.secondary : '#16A34A'} />
+                            </View>
+                            <Text numberOfLines={1} style={[styles.categoryText, { color: isDark ? colors.secondary : '#16A34A' }]}>More</Text>
+                          </Pressable>
+                        );
+                      } else {
+                        rendered.push(
+                          <Pressable
+                            key="less-categories"
+                            onPress={() => setShowAllCategories(false)}
+                            style={styles.categoryCard}
+                          >
+                            <View style={[styles.categoryIconContainer, { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.03)' : '#F5F5F7' }]}>
+                              <Ionicons name="chevron-up-outline" size={28} color={isDark ? colors.secondary : '#16A34A'} />
+                            </View>
+                            <Text numberOfLines={1} style={[styles.categoryText, { color: isDark ? colors.secondary : '#16A34A' }]}>Less</Text>
+                          </Pressable>
+                        );
+                      }
+                    }
+
+                    return rendered;
+                  })()}
+                </View>
+              ) : (
+                <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>No categories available</Text>
+              )}
+            </View>
+
+            {/* Premium Featured Offer Banner */}
+            <View style={styles.offerBannerWrapper}>
+              <View style={[styles.offerBanner, { backgroundColor: '#FFF9F0', borderColor: colors.border }]}>
+                <View style={styles.offerLeft}>
+                  <View style={styles.badgeWrapper}>
+                    <Text style={styles.badgeText}>SPECIAL OFFER</Text>
+                  </View>
+                  <Text style={[styles.offerHeading, { color: colors.text }]}>Flat 20% OFF</Text>
+                  <Text style={[styles.offerSubheading, { color: colors.textSecondary }]}>
+                    On your first home services booking
                   </Text>
-                </ScalePressable>
-                <ScalePressable
-                  style={[styles.emptySecondaryBtn, { borderColor: BRAND_COLORS.divider }]}
-                  onPress={() => {
-                    setKeyword('');
-                    setDevState('discovery');
-                  }}
-                >
-                  <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>
-                    Try Another Service
-                  </Text>
-                </ScalePressable>
+                  <View style={styles.couponCodeContainer}>
+                    <Text style={styles.couponLabel}>USE CODE:</Text>
+                    <Text style={styles.couponCode}>JUST20</Text>
+                  </View>
+                </View>
+                <Image
+                  source={{ uri: 'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?q=80&w=300&auto=format&fit=crop' }}
+                  style={styles.offerImage}
+                />
               </View>
             </View>
-          ) : (
-            // RESULT CARDS LIST
-            <FlatList
-              data={displayProviders}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ padding: GRID.lg, paddingBottom: 100 }}
-              renderItem={({ item }) => (
-                <View style={[styles.resultCard, { borderColor: BRAND_COLORS.divider }]}>
-                  <View style={{ flexDirection: 'row' }}>
-                    <Image source={{ uri: item.img }} style={styles.resultAvatar} />
-                    <View style={{ flex: 1, marginLeft: GRID.md }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
-                            {item.name}
-                          </Text>
-                          {item.verified && (
-                            <Ionicons name="checkmark-circle" size={16} color={BRAND_COLORS.primary} style={{ marginLeft: 4 }} />
-                          )}
+          </View>
+        )}
+
+        {/* ================================================================ */}
+        {/* CASE B: Keyword active but NO service selected -> Show Suggestions */}
+        {/* ================================================================ */}
+        {input.trim().length > 0 && !selectedService && (
+          <View style={styles.sectionContainer}>
+            <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 12 }]}>Suggestions</Text>
+            {servicesQuery.isLoading ? (
+              <View style={styles.feedbackContainer}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : services.length ? (
+              services.map((service) => (
+                <Pressable
+                  key={service._id}
+                  onPress={() => handleServiceSelect(service)}
+                  style={[styles.suggestionItem, { borderBottomColor: colors.border }]}
+                >
+                  <View style={[styles.suggestionIconWrapper, { backgroundColor: colors.background }]}>
+                    <Ionicons name="search-outline" size={16} color={colors.textSecondary} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[typography.bodyMedium, { color: colors.text, fontWeight: '600' }]}>{service.name}</Text>
+                    <Text style={[typography.bodySmall, { color: colors.textSecondary }]}>
+                      {service.estimatedDuration} mins delivery duration
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textSecondary} />
+                </Pressable>
+              ))
+            ) : (
+              <View style={styles.noResultsCompact}>
+                <Ionicons name="search" size={44} color={colors.textSecondary} style={{ marginBottom: 10 }} />
+                <Text style={[typography.bodyMedium, { color: colors.text, fontWeight: '600' }]}>No matching services found</Text>
+                <Text style={[typography.bodySmall, { color: colors.textSecondary, textAlign: 'center', marginTop: 4 }]}>
+                  Try searching for "Electrician", "AC Repair", or "Plumber".
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ================================================================ */}
+        {/* CASE C: Service is selected -> Show Provider Listings */}
+        {/* ================================================================ */}
+        {selectedService && (
+          <View style={styles.resultsContainer}>
+            <View style={styles.resultsHeader}>
+              <Text style={[styles.resultsTitle, { color: colors.text }]}>
+                Professionals for {selectedService.name}
+              </Text>
+              <Text style={[styles.resultsSubtitle, { color: colors.textSecondary }]}>
+                Displaying matching providers near your current location
+              </Text>
+            </View>
+
+            {!address ? (
+              <Pressable
+                onPress={() => router.push('/(customer)/addresses')}
+                style={[styles.noAddressCard, { borderColor: colors.border }]}
+              >
+                <Ionicons name="navigate-outline" size={24} color={colors.primary} />
+                <Text style={[styles.noAddressTitle, { color: colors.text }]}>Set Service Location</Text>
+                <Text style={[styles.noAddressDesc, { color: colors.textSecondary }]}>
+                  Add a delivery address to lookup service professionals in your area.
+                </Text>
+                <View style={[styles.addAddressBtn, { backgroundColor: colors.primary }]}>
+                  <Text style={styles.addAddressText}>Add Address</Text>
+                </View>
+              </Pressable>
+            ) : providersQuery.isLoading ? (
+              <View style={styles.providersLoader}>
+                <ActivityIndicator color={colors.primary} size="large" />
+                <Text style={[styles.loaderText, { color: colors.textSecondary }]}>Finding nearby experts...</Text>
+              </View>
+            ) : providersQuery.isError ? (
+              <View style={styles.errorContainer}>
+                <Ionicons name="alert-circle-outline" size={32} color="#EF4444" />
+                <Text style={[typography.bodyMedium, { color: colors.text, marginTop: 8 }]}>Could not fetch providers.</Text>
+                <Pressable onPress={handleRetry} style={styles.retryBtn}>
+                  <Text style={styles.retryText}>Retry</Text>
+                </Pressable>
+              </View>
+            ) : providers.length ? (
+              <View style={styles.providerCardList}>
+                {providers.map((provider) => {
+                  const isFav = favorites[provider.providerId] || false;
+                  return (
+                    <View
+                      key={provider.providerServiceId}
+                      style={[styles.providerPremiumCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
+                    >
+                      {/* Avatar Image & Online indicator */}
+                      <View style={styles.providerHeaderRow}>
+                        <View style={styles.avatarWrapper}>
+                          <Image source={{ uri: getAvatarUrl(provider.businessName) }} style={styles.providerAvatar} />
+                          <View style={styles.onlineBadge} />
                         </View>
-                        <Pressable onPress={() => handleFavoriteToggle(item.id)}>
+
+                        {/* Title, rating, verified badge */}
+                        <View style={styles.providerDetailsCol}>
+                          <View style={styles.titleWithVerified}>
+                            <Text style={[styles.providerName, { color: colors.text }]} numberOfLines={1}>
+                              {provider.businessName}
+                            </Text>
+                            <View style={styles.verifiedIconContainer}>
+                              <Ionicons name="checkmark-circle" size={15} color={colors.primary} />
+                            </View>
+                          </View>
+
+                          <View style={styles.providerRatingRow}>
+                            <Ionicons name="star" size={14} color={colors.secondary} />
+                            <Text style={[styles.ratingVal, { color: colors.text }]}>
+                              {provider.rating.toFixed(1)}
+                            </Text>
+                            <Text style={styles.ratingCount}> (24 completed jobs)</Text>
+                          </View>
+                        </View>
+
+                        {/* Favorite button toggle */}
+                        <Pressable onPress={() => toggleFavorite(provider.providerId)} style={styles.favToggleBtn}>
                           <Ionicons
-                            name={favorites.includes(item.id) ? 'heart' : 'heart-outline'}
-                            size={22}
-                            color={favorites.includes(item.id) ? '#DC2626' : BRAND_COLORS.secondaryText}
+                            name={isFav ? 'heart' : 'heart-outline'}
+                            size={20}
+                            color={isFav ? '#EF4444' : colors.textSecondary}
                           />
                         </Pressable>
                       </View>
-                      <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, marginTop: 2 }]}>
-                        {item.service} • {item.completed} completed jobs
-                      </Text>
-                      <View style={styles.ratingRow}>
-                        <Ionicons name="star" size={14} color={BRAND_COLORS.accent} />
-                        <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700', marginLeft: 4 }]}>
-                          {item.rating}
-                        </Text>
-                        <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, marginLeft: 8 }]}>
-                          {item.dist} km away • {item.eta} mins arrival
-                        </Text>
+
+                      {/* Travel Meta */}
+                      <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
+                      <View style={styles.providerMetaRow}>
+                        <View style={styles.metaCol}>
+                          <Text style={styles.metaLabel}>DISTANCE</Text>
+                          <Text style={[styles.metaVal, { color: colors.text }]}>{provider.distance.toFixed(1)} km</Text>
+                        </View>
+                        <View style={styles.metaCol}>
+                          <Text style={styles.metaLabel}>EXPERIENCE</Text>
+                          <Text style={[styles.metaVal, { color: colors.text }]}>{provider.experience} years</Text>
+                        </View>
+                        <View style={styles.metaCol}>
+                          <Text style={styles.metaLabel}>EST. ARRIVAL</Text>
+                          <Text style={[styles.metaVal, { color: colors.text }]}>15 mins</Text>
+                        </View>
+                      </View>
+
+                      <View style={[styles.metaDivider, { backgroundColor: colors.border }]} />
+
+                      {/* Pricing and book now block */}
+                      <View style={styles.cardFooterRow}>
+                        <View>
+                          <Text style={styles.startingPriceLabel}>STARTING PRICE</Text>
+                          <Text style={[styles.priceTag, { color: colors.primary }]}>₹{provider.price}</Text>
+                        </View>
+
+                        <Pressable
+                          onPress={() =>
+                            router.push({
+                              pathname: '/(customer)/book-service',
+                              params: {
+                                providerId: provider.providerId,
+                                providerServiceId: provider.providerServiceId,
+                                businessName: provider.businessName,
+                                price: String(provider.price),
+                                serviceId: selectedService._id,
+                                serviceName: selectedService.name,
+                              },
+                            })
+                          }
+                          style={[styles.bookBtn, { backgroundColor: colors.primary }]}
+                        >
+                          <Text style={styles.bookBtnText}>Book Now</Text>
+                          <Ionicons name="arrow-forward" size={14} color="#FFF" style={{ marginLeft: 4 }} />
+                        </Pressable>
                       </View>
                     </View>
-                  </View>
-
-                  <View style={styles.resultFooter}>
-                    <View>
-                      <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText }]}>UPFRONT RATE</Text>
-                      <Text style={[typography.h3, { color: BRAND_COLORS.primary, fontWeight: '800' }]}>
-                        ₹{item.price} <Text style={[typography.caption, { color: BRAND_COLORS.secondaryText, fontWeight: '400' }]}>/ service</Text>
-                      </Text>
-                    </View>
-                    <ScalePressable
-                      style={[styles.resultBookBtn, { backgroundColor: BRAND_COLORS.accent }]}
-                      onPress={() => router.push({
-                        pathname: '/(customer)/provider-details',
-                        params: {
-                          providerId: item.id,
-                          providerServiceId: item.id + '-service',
-                          businessName: item.name,
-                          price: String(item.price),
-                          rating: String(item.rating),
-                          experience: '5',
-                          distance: String(item.dist),
-                          serviceId: 'service',
-                          serviceName: item.service
-                        }
-                      })}
-                    >
-                      <Text style={[typography.bodyMedium, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
-                        Book Now
-                      </Text>
-                    </ScalePressable>
-                  </View>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.noResultsCard}>
+                <Ionicons name="search-outline" size={48} color={colors.textSecondary} />
+                <Text style={[styles.noResultsHeading, { color: colors.text }]}>No providers found nearby</Text>
+                <Text style={[styles.noResultsBody, { color: colors.textSecondary }]}>
+                  We couldn't find any active service professionals within your local area. Try expanding your search radius.
+                </Text>
+                <View style={styles.noResultsBtnRow}>
+                  <Pressable
+                    onPress={handleOpenFilters}
+                    style={[styles.resultsActionBtn, { backgroundColor: colors.primary }]}
+                  >
+                    <Text style={styles.resultsActionText}>Expand Filters</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleClearSelection}
+                    style={[styles.resultsActionBtnOutline, { borderColor: colors.border }]}
+                  >
+                    <Text style={[styles.resultsActionTextOutline, { color: colors.text }]}>Try Another Service</Text>
+                  </Pressable>
                 </View>
-              )}
-            />
-          )}
-          {renderDevMenu()}
-        </View>
-      )}
+              </View>
+            )}
+          </View>
+        )}
+      </ScrollView>
 
-      {/* FILTER BOTTOM SHEET */}
-      <Modal visible={isFilterOpen} transparent animationType="slide">
-        <View style={styles.bottomSheetBackdrop}>
-          <Pressable style={{ flex: 1 }} onPress={() => setIsFilterOpen(false)} />
-          <View style={[styles.bottomSheetContainer, { backgroundColor: '#FFFFFF' }]}>
+      {/* ================================================================ */}
+      {/* 2. FILTER BOTTOM SHEET PANEL */}
+      {/* ================================================================ */}
+      <Modal visible={isFilterVisible} animationType="slide" transparent>
+        <Pressable onPress={() => setIsFilterVisible(false)} style={styles.modalOverlay}>
+          <View style={[styles.bottomSheetContainer, { backgroundColor: colors.surface }]}>
+            {/* Drag Handle Indicator */}
+            <View style={[styles.dragHandle, { backgroundColor: colors.border }]} />
+
+            {/* Title block */}
             <View style={styles.sheetHeader}>
-              <Text style={[typography.h2, { color: BRAND_COLORS.darkText }]}>Filters</Text>
-              <Pressable onPress={() => setIsFilterOpen(false)}>
-                <Ionicons name="close" size={24} color={BRAND_COLORS.darkText} />
+              <Text style={[styles.sheetTitle, { color: colors.text }]}>Filter & Sort Options</Text>
+              <Pressable onPress={() => setIsFilterVisible(false)}>
+                <Ionicons name="close" size={22} color={colors.text} />
               </Pressable>
             </View>
 
-            <ScrollView style={{ padding: GRID.lg }} showsVerticalScrollIndicator={false}>
-              {/* Sort Options */}
-              <Text style={[typography.h3, { color: BRAND_COLORS.darkText, fontSize: 16, marginBottom: GRID.sm }]}>Sort By</Text>
-              <View style={styles.filterChipsRow}>
-                {[
-                  { id: 'distance', label: 'Nearest' },
-                  { id: 'rating', label: 'Highest Rated' },
-                  { id: 'price', label: 'Lowest Price' },
-                  { id: 'experience', label: 'Experienced' }
-                ].map(opt => (
-                  <Pressable
-                    key={opt.id}
-                    style={[
-                      styles.filterChipSelect,
-                      sortBy === opt.id ? { backgroundColor: BRAND_COLORS.secondaryBg, borderColor: BRAND_COLORS.accent } : { borderColor: BRAND_COLORS.divider }
-                    ]}
-                    onPress={() => setSortBy(opt.id as any)}
-                  >
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>{opt.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {/* Distance slider */}
-              <Text style={[typography.h3, { color: BRAND_COLORS.darkText, fontSize: 16, marginTop: GRID.md, marginBottom: GRID.sm }]}>
-                Max Distance: {maxDistance} km
-              </Text>
-              <View style={styles.sliderMock}>
-                <View style={styles.sliderTrack} />
-                <View style={[styles.sliderTrackFill, { width: `${(maxDistance / 15) * 100}%` }]} />
-                <View style={[styles.sliderThumb, { left: `${(maxDistance / 15) * 100 - 5}%` }]} />
-              </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-                <Pressable onPress={() => setMaxDistance(2)}><Text style={typography.caption}>2 km</Text></Pressable>
-                <Pressable onPress={() => setMaxDistance(5)}><Text style={typography.caption}>5 km</Text></Pressable>
-                <Pressable onPress={() => setMaxDistance(10)}><Text style={typography.caption}>10 km</Text></Pressable>
-                <Pressable onPress={() => setMaxDistance(15)}><Text style={typography.caption}>15 km</Text></Pressable>
-              </View>
-
-              {/* Price budget */}
-              <Text style={[typography.h3, { color: BRAND_COLORS.darkText, fontSize: 16, marginTop: GRID.md, marginBottom: GRID.sm }]}>
-                Max Budget: ₹{maxPrice}
-              </Text>
-              <View style={styles.priceRow}>
-                {[300, 500, 1000, 1500].map(price => (
-                  <Pressable
-                    key={price}
-                    style={[
-                      styles.filterChipSelect,
-                      maxPrice === price ? { backgroundColor: BRAND_COLORS.secondaryBg, borderColor: BRAND_COLORS.accent } : { borderColor: BRAND_COLORS.divider }
-                    ]}
-                    onPress={() => setMaxPrice(price)}
-                  >
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>Under ₹{price}</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {/* Rating selection */}
-              <Text style={[typography.h3, { color: BRAND_COLORS.darkText, fontSize: 16, marginTop: GRID.md, marginBottom: GRID.sm }]}>Minimum Rating</Text>
-              <View style={styles.filterChipsRow}>
-                {[4.5, 4.8, 4.9].map(rating => (
-                  <Pressable
-                    key={rating}
-                    style={[
-                      styles.filterChipSelect,
-                      minRating === rating ? { backgroundColor: BRAND_COLORS.secondaryBg, borderColor: BRAND_COLORS.accent } : { borderColor: BRAND_COLORS.divider }
-                    ]}
-                    onPress={() => setMinRating(minRating === rating ? null : rating)}
-                  >
-                    <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>★ {rating}+</Text>
-                  </Pressable>
-                ))}
-              </View>
-
-              {/* Toggle features */}
-              <View style={{ marginVertical: GRID.md, gap: 12 }}>
-                <View style={styles.switchRow}>
-                  <Text style={typography.bodyMedium}>Verified Professionals Only</Text>
-                  <Pressable
-                    style={[styles.switchTrack, verifiedOnly ? { backgroundColor: BRAND_COLORS.primary } : { backgroundColor: '#CBD5E1' }]}
-                    onPress={() => setVerifiedOnly(!verifiedOnly)}
-                  >
-                    <View style={[styles.switchThumb, verifiedOnly ? { left: 22 } : { left: 2 }]} />
-                  </Pressable>
-                </View>
-                <View style={styles.switchRow}>
-                  <Text style={typography.bodyMedium}>Emergency Services Available</Text>
-                  <Pressable
-                    style={[styles.switchTrack, emergencyOnly ? { backgroundColor: BRAND_COLORS.primary } : { backgroundColor: '#CBD5E1' }]}
-                    onPress={() => setEmergencyOnly(!emergencyOnly)}
-                  >
-                    <View style={[styles.switchThumb, emergencyOnly ? { left: 22 } : { left: 2 }]} />
-                  </Pressable>
+            {/* Filter settings scroll area */}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetScroll}>
+              {/* Sort selector */}
+              <View style={styles.filterSection}>
+                <Text style={[styles.filterTitle, { color: colors.text }]}>Sort By</Text>
+                <View style={styles.sortOptionsRow}>
+                  {[
+                    { label: 'Nearest', value: 'distance' },
+                    { label: 'Highest Rated', value: 'rating' },
+                    { label: 'Lowest Price', value: 'price' },
+                  ].map((option) => {
+                    const isSelected = tempFilters.sortBy === option.value;
+                    return (
+                      <Pressable
+                        key={option.value}
+                        onPress={() => setTempFilters((prev) => ({ ...prev, sortBy: option.value }))}
+                        style={[
+                          styles.sortItem,
+                          {
+                            borderColor: isSelected ? colors.primary : colors.border,
+                            backgroundColor: isSelected ? '#DCFCE7' : colors.surface,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.sortText, { color: isSelected ? colors.primary : colors.text }]}>
+                          {option.label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
                 </View>
               </View>
 
-              <ScalePressable
-                style={[styles.applyFilterBtn, { backgroundColor: BRAND_COLORS.accent }]}
-                onPress={() => setIsFilterOpen(false)}
-              >
-                <Text style={[typography.bodyLarge, { color: BRAND_COLORS.darkText, fontWeight: '800' }]}>
-                  Apply Filter Preferences
-                </Text>
-              </ScalePressable>
+              {/* Price filter inputs */}
+              <View style={styles.filterSection}>
+                <Text style={[styles.filterTitle, { color: colors.text }]}>Price Cap (Starting Price)</Text>
+                <View style={styles.priceRow}>
+                  <View style={[styles.priceInputBox, { borderColor: colors.border }]}>
+                    <Text style={styles.currencySymbol}>₹</Text>
+                    <TextInput
+                      keyboardType="numeric"
+                      value={tempFilters.minPrice ? String(tempFilters.minPrice) : ''}
+                      onChangeText={(val) =>
+                        setTempFilters((prev) => ({ ...prev, minPrice: val ? Number(val) : undefined }))
+                      }
+                      placeholder="Min Price"
+                      placeholderTextColor={colors.textSecondary}
+                      style={[styles.priceTextInput, { color: colors.text }]}
+                    />
+                  </View>
+                  <Text style={[styles.rangeToText, { color: colors.textSecondary }]}>to</Text>
+                  <View style={[styles.priceInputBox, { borderColor: colors.border }]}>
+                    <Text style={styles.currencySymbol}>₹</Text>
+                    <TextInput
+                      keyboardType="numeric"
+                      value={tempFilters.maxPrice ? String(tempFilters.maxPrice) : ''}
+                      onChangeText={(val) =>
+                        setTempFilters((prev) => ({ ...prev, maxPrice: val ? Number(val) : undefined }))
+                      }
+                      placeholder="Max Price"
+                      placeholderTextColor={colors.textSecondary}
+                      style={[styles.priceTextInput, { color: colors.text }]}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* Minimum rating selector */}
+              <View style={styles.filterSection}>
+                <Text style={[styles.filterTitle, { color: colors.text }]}>Minimum Rating</Text>
+                <View style={styles.sortOptionsRow}>
+                  {[undefined, 4.0, 4.5, 4.8].map((rating) => {
+                    const isSelected = tempFilters.minRating === rating;
+                    const label = rating === undefined ? 'Any' : `⭐ ${rating}+`;
+                    return (
+                      <Pressable
+                        key={String(rating)}
+                        onPress={() => setTempFilters((prev) => ({ ...prev, minRating: rating }))}
+                        style={[
+                          styles.sortItem,
+                          {
+                            borderColor: isSelected ? colors.primary : colors.border,
+                            backgroundColor: isSelected ? '#DCFCE7' : colors.surface,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.sortText, { color: isSelected ? colors.primary : colors.text }]}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Experience selector */}
+              <View style={styles.filterSection}>
+                <Text style={[styles.filterTitle, { color: colors.text }]}>Minimum Experience</Text>
+                <View style={styles.sortOptionsRow}>
+                  {[undefined, 2, 5, 8].map((exp) => {
+                    const isSelected = tempFilters.minExperience === exp;
+                    const label = exp === undefined ? 'Any' : `${exp}+ years`;
+                    return (
+                      <Pressable
+                        key={String(exp)}
+                        onPress={() => setTempFilters((prev) => ({ ...prev, minExperience: exp }))}
+                        style={[
+                          styles.sortItem,
+                          {
+                            borderColor: isSelected ? colors.primary : colors.border,
+                            backgroundColor: isSelected ? '#DCFCE7' : colors.surface,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.sortText, { color: isSelected ? colors.primary : colors.text }]}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
             </ScrollView>
+
+            {/* Action buttons footer */}
+            <View style={[styles.sheetFooter, { borderTopColor: colors.border }]}>
+              <Pressable
+                onPress={handleResetFilters}
+                style={[styles.sheetFooterBtnOutline, { borderColor: colors.border }]}
+              >
+                <Text style={[styles.sheetFooterBtnOutlineText, { color: colors.text }]}>Reset</Text>
+              </Pressable>
+              <Pressable onPress={handleApplyFilters} style={[styles.sheetFooterBtn, { backgroundColor: colors.primary }]}>
+                <Text style={styles.sheetFooterBtnText}>Apply Filters</Text>
+              </Pressable>
+            </View>
           </View>
-        </View>
+        </Pressable>
       </Modal>
 
-      {/* VOICE LISTENING MODAL */}
-      <Modal visible={isVoiceListening} transparent animationType="fade">
-        <View style={styles.modalBackdrop}>
-          <View style={[styles.voiceContainer, { backgroundColor: '#FFFFFF' }]}>
-            <Text style={[typography.h2, { color: BRAND_COLORS.darkText }]}>Listening...</Text>
-            <Text style={[typography.bodyMedium, { color: BRAND_COLORS.secondaryText, marginTop: 8 }]}>
-              Say "Leakage repair" or "Cleaning service"
-            </Text>
-            <View style={styles.wavesContainer}>
-              <View style={[styles.pulseWave, { width: 100, height: 100, borderRadius: 50, opacity: 0.1, backgroundColor: BRAND_COLORS.primary }]} />
-              <View style={[styles.pulseWave, { width: 80, height: 80, borderRadius: 40, opacity: 0.25, backgroundColor: BRAND_COLORS.primary, position: 'absolute' }]} />
-              <View style={[styles.micActiveCircle, { backgroundColor: BRAND_COLORS.primary }]}>
-                <Ionicons name="mic" size={32} color="#FFFFFF" />
+      {/* ================================================================ */}
+      {/* 3. VOICE SEARCH MODAL OVERLAY */}
+      {/* ================================================================ */}
+      <Modal visible={isVoiceVisible} transparent animationType="fade">
+        <View style={styles.voiceSearchOverlay}>
+          <View style={styles.voiceSearchCard}>
+            <Text style={styles.voiceSearchTitle}>Listening...</Text>
+            <Text style={styles.voiceSearchSubtitle}>Say a service like "Plumber" or "AC Repair"</Text>
+
+            {/* Pulsing mic waves */}
+            <View style={styles.pulseContainer}>
+              <Animated.View
+                style={[
+                  styles.pulseRing,
+                  {
+                    transform: [
+                      {
+                        scale: voiceWaveAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [1, 2.5],
+                        }),
+                      },
+                    ],
+                    opacity: voiceWaveAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.6, 0],
+                    }),
+                  },
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.pulseRingInner,
+                  {
+                    transform: [
+                      {
+                        scale: voiceWaveAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [1, 1.8],
+                        }),
+                      },
+                    ],
+                    opacity: voiceWaveAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.8, 0],
+                    }),
+                  },
+                ]}
+              />
+              <View style={styles.micCircle}>
+                <Ionicons name="mic" size={40} color="#FFF" />
               </View>
             </View>
-            <Pressable style={styles.closeVoiceBtn} onPress={() => setIsVoiceListening(false)}>
-              <Text style={[typography.bodyMedium, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>Cancel</Text>
+
+            <Pressable onPress={() => setIsVoiceVisible(false)} style={styles.voiceCancelBtn}>
+              <Text style={styles.voiceCancelText}>Cancel</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaViewContainer>
   );
+}
 
-  // Sandboxed developer control toggles
-  function renderDevMenu() {
-    return (
-      <View style={styles.devMenu}>
-        <Pressable onPress={() => setIsDevMenuOpen(!isDevMenuOpen)} style={styles.devMenuHeader}>
-          <Text style={[typography.bodySmall, { color: BRAND_COLORS.secondaryText, fontWeight: '800' }]}>
-            🛠️ Dev Search Sandbox ({devState.toUpperCase()})
-          </Text>
-          <Ionicons name={isDevMenuOpen ? 'chevron-up' : 'chevron-down'} size={14} color={BRAND_COLORS.secondaryText} />
-        </Pressable>
-        {isDevMenuOpen && (
-          <View style={styles.devMenuButtons}>
-            {[
-              { id: 'discovery', label: 'Discovery Home' },
-              { id: 'results', label: 'Search Results' },
-              { id: 'empty', label: 'No Results' },
-              { id: 'loading', label: 'Shimmers' }
-            ].map(stateItem => (
-              <Pressable
-                key={stateItem.id}
-                style={[
-                  styles.devChip,
-                  {
-                    backgroundColor: devState === stateItem.id ? BRAND_COLORS.accent : '#F1F5F9',
-                    borderColor: devState === stateItem.id ? BRAND_COLORS.accent : BRAND_COLORS.divider,
-                  }
-                ]}
-                onPress={() => {
-                  setDevState(stateItem.id as any);
-                  setIsDevMenuOpen(false);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  if (stateItem.id === 'discovery') setKeyword('');
-                  if (stateItem.id === 'results') setKeyword('Electrician');
-                }}
-              >
-                <Text style={[typography.caption, { color: BRAND_COLORS.darkText, fontWeight: '700' }]}>
-                  {stateItem.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </View>
-    );
+// Custom wrapper to properly handle cross-platform safe areas on tab screens
+function SafeAreaViewContainer({ children, style }: { children: React.ReactNode; style?: any }) {
+  if (Platform.OS === 'ios') {
+    return <View style={[{ flex: 1, paddingTop: 48 }, style]}>{children}</View>;
   }
+  return <View style={[{ flex: 1, paddingTop: 24 }, style]}>{children}</View>;
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  headerContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
-  searchHeader: {
+  locationSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 56 : 24,
-    paddingBottom: GRID.md,
-    borderBottomWidth: 1,
+    marginBottom: 8,
+    alignSelf: 'flex-start',
+  },
+  locationText: {
+    fontWeight: '600',
+    marginHorizontal: 4,
+    maxWidth: 240,
+  },
+  searchBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   searchBarContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 12,
     height: 48,
-    borderRadius: 14,
-    paddingHorizontal: 8,
-  },
-  searchIcon: {
-    marginLeft: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
-    paddingLeft: GRID.sm,
+    height: '100%',
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '500',
+    padding: 0,
   },
-  micBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+  clearBtn: {
+    padding: 4,
+  },
+  actionBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 8,
-    backgroundColor: '#F1F5F9',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
   },
-  filterBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: 8,
-    backgroundColor: '#F1F5F9',
-  },
-  locationBar: {
+  filterChipsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 40,
-    paddingHorizontal: 24,
+    gap: 8,
+    marginTop: 12,
+    paddingBottom: 2,
   },
-  suggestionsContainer: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 116 : 84,
-    left: 0,
-    right: 0,
-    backgroundColor: '#FFFFFF',
-    zIndex: 9999,
-    padding: GRID.lg,
-    maxHeight: 280,
-    borderBottomWidth: 1.5,
-    borderBottomColor: BRAND_COLORS.divider,
-  },
-  suggestionRow: {
+  chipButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: GRID.md,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 6,
+    gap: 4,
   },
-  closeOverlayBtn: {
-    paddingVertical: GRID.lg,
-    alignItems: 'center',
+  chipText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  scrollContent: {
+    paddingBottom: 110, // Generous padding to prevent floating system bars overlaying content
   },
   sectionContainer: {
-    marginTop: GRID.lg,
-    paddingHorizontal: 24,
+    marginTop: 20,
+    paddingHorizontal: 16,
   },
-  sectionTitleRow: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: GRID.md,
+    marginBottom: 10,
   },
-  recentItem: {
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  clearAllText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  recentSearchesList: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  recentSearchItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: GRID.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  trendingChip: {
+  recentSearchInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
+    flex: 1,
   },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  recentClock: {
+    marginRight: 10,
   },
-  categoryCard: {
-    width: '23%',
-    minHeight: 90,
-    borderRadius: GRID.radiusCard,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  recentSearchRemove: {
     padding: 6,
   },
-  catIconCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
+  popularRow: {
+    paddingVertical: 4,
+  },
+  tagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginRight: 8,
+  },
+  tagText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  gridLoader: {
+    height: 120,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  proCard: {
-    width: 240,
-    borderRadius: GRID.radiusCard,
-    borderWidth: 1,
-    padding: GRID.md,
-    backgroundColor: '#FFFFFF',
-  },
-  proAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-  },
-  verifiedBadge: {
-    alignSelf: 'flex-start',
-  },
-  proMetaRow: {
+  gridContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
     justifyContent: 'space-between',
-    marginTop: GRID.sm,
   },
-  proFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: GRID.md,
-    borderTopWidth: 1,
-    borderTopColor: BRAND_COLORS.divider,
-    paddingTop: GRID.sm,
-  },
-  proBookBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  offerCard: {
-    width: 160,
-    borderRadius: GRID.radiusCard,
-    borderWidth: 1,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  offerImg: {
+  categoryGrid: { 
+    flexDirection: 'row', 
+    flexWrap: 'wrap', 
+    justifyContent: 'flex-start',
+    marginHorizontal: -4,
+  }, 
+  categoryCard: { 
+    width: '31.3%', 
+    marginHorizontal: '1%',
+    marginBottom: 16,
+    alignItems: 'center', 
+    justifyContent: 'flex-start',
+  }, 
+  categoryIconContainer: {
     width: '100%',
-    height: 100,
+    aspectRatio: 1,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    overflow: 'hidden',
   },
-  offerBadge: {
+  categoryImage: { 
+    width: '80%', 
+    height: '80%', 
+    resizeMode: 'contain',
+    borderRadius: 12,
+  }, 
+  categoryText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    lineHeight: 14,
+  },
+  categoryChevron: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
+    right: 6,
+    bottom: 6,
   },
-  recentViewedCard: {
-    width: 240,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: GRID.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-  recentViewedImg: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
-  },
-  recentBookBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  quickFilterBar: {
-    paddingVertical: GRID.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: BRAND_COLORS.divider,
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: BRAND_COLORS.divider,
-  },
-  resultCard: {
-    borderRadius: GRID.radiusCard,
-    borderWidth: 1.5,
-    padding: GRID.md,
-    marginBottom: GRID.md,
-    backgroundColor: '#FFFFFF',
-  },
-  resultAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  resultFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    borderTopWidth: 1,
-    borderTopColor: BRAND_COLORS.divider,
-    paddingTop: GRID.md,
-    marginTop: GRID.md,
-  },
-  resultBookBtn: {
+  offerBannerWrapper: {
     paddingHorizontal: 16,
+    marginTop: 24,
+  },
+  offerBanner: {
+    flexDirection: 'row',
+    borderWidth: 1.5,
+    borderRadius: 24,
+    padding: 16,
+    overflow: 'hidden',
+  },
+  offerLeft: {
+    flex: 1.3,
+    justifyContent: 'center',
+  },
+  badgeWrapper: {
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 6,
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  offerHeading: {
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  offerSubheading: {
+    fontSize: 12,
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  couponCodeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 10,
+    gap: 4,
+  },
+  couponLabel: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '700',
+  },
+  couponCode: {
+    fontSize: 11,
+    color: '#16A34A',
+    fontWeight: '800',
+    borderWidth: 1,
+    borderColor: '#16A34A',
+    borderStyle: 'dashed',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  offerImage: {
+    flex: 1,
+    height: 100,
+    borderRadius: 16,
+    resizeMode: 'cover',
+  },
+  feedbackContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 12,
+  },
+  suggestionIconWrapper: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noResultsCompact: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  resultsContainer: {
+    marginTop: 16,
+    paddingHorizontal: 16,
+  },
+  resultsHeader: {
+    marginBottom: 16,
+  },
+  resultsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  resultsSubtitle: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  noAddressCard: {
+    borderWidth: 1.5,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    backgroundColor: '#FFF9F0',
+    marginTop: 10,
+  },
+  noAddressTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 12,
+  },
+  noAddressDesc: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  addAddressBtn: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  addAddressText: {
+    color: '#FFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  providersLoader: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loaderText: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  errorContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  retryBtn: {
+    marginTop: 12,
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 10,
   },
-  emptyContainer: {
+  retryText: {
+    color: '#FFF',
+    fontWeight: '700',
+  },
+  providerCardList: {
+    gap: 14,
+  },
+  providerPremiumCard: {
+    borderWidth: 1.5,
+    borderRadius: 24,
+    padding: 16,
+    elevation: 4,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+  },
+  providerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarWrapper: {
+    position: 'relative',
+    marginRight: 12,
+  },
+  providerAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  onlineBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 13,
+    height: 13,
+    borderRadius: 6.5,
+    backgroundColor: '#22C55E',
+    borderWidth: 2,
+    borderColor: '#FFF',
+  },
+  providerDetailsCol: {
     flex: 1,
+  },
+  titleWithVerified: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  providerName: {
+    fontSize: 15,
+    fontWeight: '700',
+    maxWidth: SCREEN_WIDTH * 0.45,
+  },
+  verifiedIconContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    padding: GRID.xl,
   },
-  emptyIconCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    justifyContent: 'center',
+  providerRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  ratingVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 3,
+  },
+  ratingCount: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '500',
+  },
+  favToggleBtn: {
+    padding: 6,
+  },
+  metaDivider: {
+    height: 1,
+    marginVertical: 12,
+    opacity: 0.5,
+  },
+  providerMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  metaCol: {
+    flex: 1,
+  },
+  metaLabel: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  metaVal: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  emptyActionBtn: {
-    width: '100%',
-    height: 50,
+  startingPriceLabel: {
+    fontSize: 9,
+    color: '#94A3B8',
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  priceTag: {
+    fontSize: 18,
+    fontWeight: '800',
+    marginTop: 1,
+  },
+  bookBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  emptySecondaryBtn: {
-    width: '100%',
-    height: 50,
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  bookBtnText: {
+    color: '#FFF',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  bottomSheetBackdrop: {
+  noResultsCard: {
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: 24,
+    padding: 24,
+    backgroundColor: '#F8FAFC',
+    marginTop: 10,
+  },
+  noResultsHeading: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginTop: 12,
+  },
+  noResultsBody: {
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  noResultsBtnRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  resultsActionBtn: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  resultsActionText: {
+    color: '#FFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  resultsActionBtnOutline: {
+    borderWidth: 1.5,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+  },
+  resultsActionTextOutline: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.4)',
     justifyContent: 'flex-end',
@@ -1168,156 +1572,189 @@ const styles = StyleSheet.create({
   bottomSheetContainer: {
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-    maxHeight: '85%',
+    paddingTop: 8,
+    maxHeight: SCREEN_HEIGHT * 0.85,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+  },
+  dragHandle: {
+    width: 38,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: 8,
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: GRID.lg,
-    borderBottomWidth: 1,
-    borderBottomColor: BRAND_COLORS.divider,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
   },
-  filterChipsRow: {
+  sheetTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  sheetScroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  filterSection: {
+    marginTop: 20,
+  },
+  filterTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  sortOptionsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: GRID.md,
   },
-  filterChipSelect: {
-    paddingHorizontal: 12,
+  sortItem: {
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
+  },
+  sortText: {
+    fontSize: 13,
+    fontWeight: '600',
   },
   priceRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: GRID.md,
-  },
-  sliderMock: {
-    height: 30,
-    justifyContent: 'center',
-    position: 'relative',
-    marginHorizontal: 10,
-  },
-  sliderTrack: {
-    height: 4,
-    backgroundColor: BRAND_COLORS.divider,
-    borderRadius: 2,
-  },
-  sliderTrackFill: {
-    height: 4,
-    backgroundColor: BRAND_COLORS.primary,
-    borderRadius: 2,
-    position: 'absolute',
-  },
-  sliderThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: BRAND_COLORS.primary,
-    position: 'absolute',
-    elevation: 3,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
   },
-  switchTrack: {
-    width: 44,
-    height: 24,
-    borderRadius: 12,
-    padding: 2,
-    position: 'relative',
-  },
-  switchThumb: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: '#FFFFFF',
-    position: 'absolute',
-    top: 2,
-  },
-  applyFilterBtn: {
-    height: 52,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: GRID.lg,
-    marginBottom: GRID.xxl,
-  },
-  devMenu: {
-    margin: GRID.lg,
-    borderWidth: 1,
-    borderColor: BRAND_COLORS.divider,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  devMenuHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: GRID.sm,
-    backgroundColor: '#FFFFFF',
-  },
-  devMenuButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    padding: GRID.sm,
-    backgroundColor: '#F8F8F6',
-  },
-  devChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  modalBackdrop: {
+  priceInputBox: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    height: 46,
+  },
+  currencySymbol: {
+    fontSize: 14,
+    color: '#94A3B8',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  priceTextInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 14,
+    fontWeight: '500',
+    padding: 0,
+  },
+  rangeToText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  sheetFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    borderTopWidth: 1,
+  },
+  sheetFooterBtnOutline: {
+    flex: 1,
+    borderWidth: 1.5,
+    height: 48,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: GRID.xl,
   },
-  voiceContainer: {
-    width: '90%',
-    borderRadius: 28,
-    padding: GRID.xl,
+  sheetFooterBtnOutlineText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sheetFooterBtn: {
+    flex: 1.8,
+    height: 48,
+    borderRadius: 16,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  wavesContainer: {
+  sheetFooterBtnText: {
+    color: '#FFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  voiceSearchOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  voiceSearchCard: {
+    width: SCREEN_WIDTH * 0.85,
+    backgroundColor: '#FFF',
+    borderRadius: 28,
+    padding: 24,
+    alignItems: 'center',
+  },
+  voiceSearchTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  voiceSearchSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+  },
+  pulseContainer: {
     width: 140,
     height: 140,
     justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: GRID.xxl,
+    marginVertical: 40,
+    position: 'relative',
   },
-  pulseWave: {
+  pulseRing: {
     position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#16A34A',
   },
-  micActiveCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  pulseRingInner: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#22C55E',
+  },
+  micCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: '#16A34A',
     justifyContent: 'center',
     alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#16A34A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
   },
-  closeVoiceBtn: {
+  voiceCancelBtn: {
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
     width: '100%',
-    height: 48,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: BRAND_COLORS.divider,
-    justifyContent: 'center',
     alignItems: 'center',
+  },
+  voiceCancelText: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '700',
   },
 });

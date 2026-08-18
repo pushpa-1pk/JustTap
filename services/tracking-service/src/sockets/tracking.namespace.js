@@ -9,9 +9,13 @@ const cacheService = require('../services/cache.service');
 const localThrottleMap = new Map();     // socketId -> lastPacketTimestampMillis
 const lastTrackedTimestampMap = new Map(); // bookingId:providerId -> lastValidPacketISODate
 
+const socketAuthMiddleware = require('../middlewares/socketAuth.middleware');
+
 const registerTrackingNamespace = (io, bookingClient, telemetryService) => {
   // Senior Improvement: Segment gateway listeners inside a dedicated /tracking namespace boundary
   const trackingNamespace = io.of('/tracking');
+
+  trackingNamespace.use(socketAuthMiddleware);
 
   trackingNamespace.use((socket, next) => {
     socket.conn.on('packet', (packet) => {

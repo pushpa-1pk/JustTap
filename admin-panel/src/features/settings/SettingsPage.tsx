@@ -3,8 +3,11 @@ import {
   Settings, Save, ShieldAlert, BadgeDollarSign, 
   Map, Bell, Database, Cloud, ToggleLeft, ToggleRight 
 } from 'lucide-react';
+import { useGetPlatformSettingsQuery } from '../../redux/slices/adminApi';
 
 export default function SettingsPage() {
+  const { data: settings } = useGetPlatformSettingsQuery();
+
   // Config state
   const [commissionRate, setCommissionRate] = useState(20);
   const [taxRate, setTaxRate] = useState(18);
@@ -15,6 +18,17 @@ export default function SettingsPage() {
   const [cloudinaryKey, setCloudinaryKey] = useState('498291039828103');
   
   const [isSaving, setIsSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (settings) {
+      setCommissionRate(settings.commissionRate);
+      setTaxRate(settings.taxRate);
+      setMatchingRadius(settings.matchingRadius);
+      setMaintenanceMode(settings.maintenanceMode);
+      setCloudinaryName(settings.cloudinaryName);
+      setCloudinaryKey(settings.cloudinaryKey);
+    }
+  }, [settings]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();

@@ -4,6 +4,10 @@ import {
   Trash2, AlertTriangle, Play, RefreshCw, 
   CheckCircle, FileText, Check 
 } from 'lucide-react';
+import {
+  useGetAlertTemplatesQuery,
+  useGetDlqQueueQuery
+} from '../../redux/slices/adminApi';
 
 export default function NotificationsPage() {
   const [activeTab, setActiveTab] = useState<'campaign' | 'dlq' | 'templates'>('campaign');
@@ -15,18 +19,16 @@ export default function NotificationsPage() {
   const [targetType, setTargetType] = useState<'ALL' | 'CUSTOMERS' | 'PROVIDERS' | 'CITY'>('ALL');
   const [targetCity, setTargetCity] = useState('Mumbai');
 
-  // Mock DLQ Queue
-  const [dlqQueue, setDlqQueue] = useState<any[]>([
-    { _id: 'dlq_01', messageId: 'msg_9028', channel: 'SMS', error: 'SMTP Timeout Response (504)', payload: { to: '+919876543210', body: 'Your JustTap OTP is 890123' }, timestamp: '2026-08-07T12:00:00.000Z' },
-    { _id: 'dlq_02', messageId: 'msg_9029', channel: 'PUSH', error: 'FCM Client Token Expired (404)', payload: { to: 'fcm_tok_8928', title: 'Provider arrived', body: 'Your cleaner has arrived.' }, timestamp: '2026-08-07T14:30:00.000Z' }
-  ]);
+  const { data: templates = [] } = useGetAlertTemplatesQuery();
+  const { data: initialDlq = [] } = useGetDlqQueueQuery();
 
-  // Mock Templates
-  const mockTemplates = [
-    { id: 'tmp_1', name: 'OTP Verification', channel: 'SMS', content: 'Your JustTap OTP is {otp}. It expires in 5 minutes.' },
-    { id: 'tmp_2', name: 'Provider Arrived Alert', channel: 'PUSH', content: 'Your provider {name} has arrived at your address.' },
-    { id: 'tmp_3', name: 'Completed Job Invoice', channel: 'EMAIL', content: 'Thank you for booking with JustTap. Attached is your invoice for ₹{amount}.' }
-  ];
+  const [dlqQueue, setDlqQueue] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    if (initialDlq && initialDlq.length > 0) {
+      setDlqQueue(initialDlq);
+    }
+  }, [initialDlq]);
 
   const handleSendCampaign = (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,7 +193,7 @@ export default function NotificationsPage() {
       ) : activeTab === 'templates' ? (
         /* Templates List */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockTemplates.map((t) => (
+          {templates.map((t: any) => (
             <div key={t.id} className="p-4 bg-card border border-border rounded-xl flex flex-col justify-between min-h-[160px]">
               <div>
                 <div className="flex justify-between items-center mb-2">

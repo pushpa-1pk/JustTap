@@ -17,37 +17,7 @@ export default function SupportPage() {
   const { data: tickets, isLoading, refetch } = useGetSupportTicketsQuery();
   const [replyToTicket, { isLoading: isReplying }] = useReplyToTicketMutation();
 
-  // Mock support tickets database for development
-  const mockTickets = [
-    {
-      _id: 'tkt_01',
-      userId: 'cust_01',
-      subject: 'Refund not reflecting in Bank',
-      description: 'I cancelled my booking JT-829103, but the refund amount is not credited yet.',
-      category: 'PAYMENTS',
-      status: 'OPEN',
-      createdAt: '2026-08-07T08:00:00.000Z',
-      messages: [
-        { sender: 'CUSTOMER', text: 'I cancelled my booking JT-829103, but the refund amount is not credited yet.', timestamp: '2026-08-07T08:00:00.000Z' },
-        { sender: 'SUPPORT_AGENT', text: 'Hi Anita, we have processed the refund. It might take 3-5 business days to reflect in your HDFC account.', timestamp: '2026-08-07T08:15:00.000Z' },
-        { sender: 'CUSTOMER', text: 'Okay, I will wait. Thank you.', timestamp: '2026-08-07T08:20:00.000Z' }
-      ]
-    },
-    {
-      _id: 'tkt_02',
-      userId: 'prov_01',
-      subject: 'Verification documents rejected',
-      description: 'Why was my trade license rejected? I uploaded the updated PDF.',
-      category: 'ACCOUNT_ONBOARDING',
-      status: 'PENDING',
-      createdAt: '2026-08-07T10:00:00.000Z',
-      messages: [
-        { sender: 'CUSTOMER', text: 'Why was my trade license rejected? I uploaded the updated PDF.', timestamp: '2026-08-07T10:00:00.000Z' }
-      ]
-    }
-  ];
-
-  const activeTickets = tickets || mockTickets;
+  const activeTickets = tickets || [];
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();

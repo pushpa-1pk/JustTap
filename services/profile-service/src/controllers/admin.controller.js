@@ -1,4 +1,4 @@
-const asyncHandler = require("../utils/asyncHandler");
+﻿const asyncHandler = require("../utils/asyncHandler");
 const ApiResponse = require("../utils/ApiResponse");
 const ApiError = require("../utils/ApiError");
 const adminService = require("../services/admin.service");
@@ -42,11 +42,19 @@ class AdminController {
   });
 
   verifyDocument = asyncHandler(async (req, res) => {
-    const { isApproved } = req.body;
+    const { isApproved, rejectionReason } = req.body;
     if (typeof isApproved !== "boolean") {
       throw new ApiError(400, "isApproved must be a boolean");
     }
-    const result = await adminService.verifyDocument(req.params.documentId, req.user.id, isApproved);
+    if (isApproved === false && !rejectionReason) {
+      throw new ApiError(400, "rejectionReason is required when rejecting a document");
+    }
+    const result = await adminService.verifyDocument(
+      req.params.documentId,
+      req.user.id,
+      isApproved,
+      rejectionReason || null
+    );
     res.status(200).json(new ApiResponse(200, result.message, result.document));
   });
 }

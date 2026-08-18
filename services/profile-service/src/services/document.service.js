@@ -123,9 +123,9 @@ class DocumentService {
     };
   }
 
-  async verifyDocument(documentId, isApproved, reviewedBy) {
+  async verifyDocument(documentId, isApproved, reviewedBy, rejectionReason = null) {
     const status = isApproved ? "approved" : "rejected";
-    const document = await documentRepository.updateStatus(documentId, status, reviewedBy);
+    const document = await documentRepository.updateStatus(documentId, status, reviewedBy, rejectionReason);
 
     if (!document) {
       throw new ApiError(404, "Document not found");

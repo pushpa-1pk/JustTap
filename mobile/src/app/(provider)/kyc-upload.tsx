@@ -1,32 +1,50 @@
 import React, { useState } from 'react';
 import { StyleSheet, Text, View, Pressable, ActivityIndicator, FlatList, Alert } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadToCloudinary } from '@/utils/cloudinary';
-import { 
-  useGetProviderDocuments, 
-  useUploadProviderDocument, 
+import {
+  useGetProviderDocuments,
+  useUploadProviderDocument,
   useDeleteProviderDocument,
-  useRequestApproval
+  useRequestApproval,
+  useGetKycRequirements,
+  type KycRequirement,
 } from '@/hooks/useProviderProfile';
-import SvgIcon from '@/components/common/SvgIcon';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+
+type DocType = 'aadhar' | 'pan' | 'profile_photo' | 'trade_license' | 'gst' | 'shop_license';
 
 export default function KycUploadScreen() {
   const { colors, typography, spacing } = useTheme();
   const router = useRouter();
+  const params = useLocalSearchParams<{ resubmit?: string }>();
+  const isResubmit = params.resubmit === 'true';
 
-  // Selected document type
-  const [selectedDocType, setSelectedDocType] = useState<'aadhar' | 'pan' | 'trade_license' | 'gst' | 'shop_license'>('aadhar');
+  const [selectedDocType, setSelectedDocType] = useState<DocType>('aadhar');
   const [isUploading, setIsUploading] = useState(false);
 
   // Queries & Mutations
-  const { data: documents, isLoading, refetch } = useGetProviderDocuments();
+  const { data: requirements, isLoading: isReqLoading } = useGetKycRequirements();
+  const { data: documents, isLoading: isDocsLoading, refetch } = useGetProviderDocuments();
   const uploadDocMutation = useUploadProviderDocument();
   const deleteDocMutation = useDeleteProviderDocument();
   const requestApprovalMutation = useRequestApproval();
+
+  const isLoading = isReqLoading || isDocsLoading;
+
+  // For resubmit mode, only show requirements where the uploaded doc was rejected
+  const visibleRequirements: KycRequirement[] = isResubmit
+    ? (requirements || []).filter((req) => {
+        const uploaded = documents?.find(d => d.documentType === req.documentType);
+        return uploaded?.status === 'rejected';
+      })
+    : (requirements || []);
+
+  const getUploadedDoc = (docType: string) =>
+    documents?.find(d => d.documentType === docType);
 
   const handlePickAndUpload = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -43,22 +61,17 @@ export default function KycUploadScreen() {
 
     if (!result.canceled && result.assets?.[0]?.uri) {
       const localUri = result.assets[0].uri;
-      
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       setIsUploading(true);
-      
+
       try {
-        // 1. Upload file to Cloudinary
         const cloudinaryRes = await uploadToCloudinary(localUri);
-        
-        // 2. Upload fileUrl to Profile Service
         await uploadDocMutation.mutateAsync({
           documentType: selectedDocType,
           fileUrl: cloudinaryRes.secure_url,
         });
-
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('Verification Uploaded', 'Your document has been uploaded successfully for review.');
+        Alert.alert('Uploaded', 'Your document has been submitted for review.');
         refetch();
       } catch (err: any) {
         console.error('KYC Upload failed:', err);
@@ -98,23 +111,27 @@ export default function KycUploadScreen() {
     try {
       await requestApprovalMutation.mutateAsync();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Review Requested', 'Your profile details and documents have been sent to admins for review.');
+      Alert.alert(
+        'Submitted for Review',
+        'Your profile and documents have been sent to admins for verification.',
+        [{ text: 'OK', onPress: () => router.back() }]
+      );
     } catch (err: any) {
       console.error('Request approval failed:', err);
       Alert.alert('Error', err.response?.data?.message || 'Failed to request approval.');
     }
   };
 
-  const getStatusStyle = (status: string) => {
+  const getStatusStyle = (status?: string) => {
     switch (status?.toLowerCase()) {
       case 'approved':
-        return { bg: colors.secondary + '15', text: colors.secondary, icon: 'shield-checkmark' };
+        return { bg: colors.secondary + '18', text: colors.secondary, icon: 'shield-checkmark' as const };
       case 'rejected':
-        return { bg: colors.danger + '15', text: colors.danger, icon: 'alert-circle' };
+        return { bg: colors.danger + '18', text: colors.danger, icon: 'alert-circle' as const };
       case 'under_review':
-        return { bg: colors.warning + '15', text: colors.warning, icon: 'time' };
+        return { bg: colors.warning + '18', text: colors.warning, icon: 'time' as const };
       default:
-        return { bg: colors.textSecondary + '15', text: colors.textSecondary, icon: 'ellipse' };
+        return { bg: colors.textSecondary + '18', text: colors.textSecondary, icon: 'ellipse' as const };
     }
   };
 
@@ -126,45 +143,76 @@ export default function KycUploadScreen() {
     );
   }
 
+  const hasRequiredDocs = (requirements || [])
+    .filter(r => r.isRequired)
+    .every(r => {
+      const doc = getUploadedDoc(r.documentType);
+      return doc && doc.status !== 'rejected';
+    });
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <FlatList
-        data={documents}
-        keyExtractor={(item) => item._id}
+        data={visibleRequirements}
+        keyExtractor={(item) => item.documentType}
         contentContainerStyle={styles.scroll}
         ListHeaderComponent={
           <>
-            {/* Form Selection card */}
-            <View style={[styles.cardForm, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.xs }]}>Verify Credentials</Text>
-              <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 12 }]}>
-                Choose a document type, select your file, and upload to verify your account credentials.
+            {isResubmit && (
+              <View style={[styles.resubmitBanner, { backgroundColor: colors.danger + '15', borderColor: colors.danger }]}>
+                <Ionicons name="warning" size={18} color={colors.danger} />
+                <Text style={[typography.bodySmall, { color: colors.danger, marginLeft: 8, flex: 1 }]}>
+                  Re-upload only the rejected documents below. Approved documents don't need re-submission.
+                </Text>
+              </View>
+            )}
+
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[typography.h3, { color: colors.text, marginBottom: 4 }]}>
+                {isResubmit ? 'Re-upload Rejected Documents' : 'Upload Verification Documents'}
+              </Text>
+              <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 14 }]}>
+                Select a document type, then pick a file to upload.
               </Text>
 
-              {/* Selector types */}
-              <View style={styles.pickerContainer}>
-                {(['aadhar', 'pan', 'trade_license', 'gst', 'shop_license'] as const).map((type) => (
-                  <Pressable
-                    key={type}
-                    style={[
-                      styles.pickerBtn,
-                      { borderColor: colors.border },
-                      selectedDocType === type && { backgroundColor: colors.secondary, borderColor: colors.secondary }
-                    ]}
-                    onPress={() => setSelectedDocType(type)}
-                  >
-                    <Text style={[
-                      typography.bodySmall,
-                      { color: colors.text },
-                      selectedDocType === type && { color: colors.onSecondary, fontWeight: '700' }
-                    ]}>
-                      {type.toUpperCase().replace('_', ' ')}
-                    </Text>
-                  </Pressable>
-                ))}
+              {/* Dynamic type selector from backend */}
+              <View style={styles.picker}>
+                {visibleRequirements.map((req) => {
+                  const isSelected = selectedDocType === req.documentType;
+                  return (
+                    <Pressable
+                      key={req.documentType}
+                      style={[
+                        styles.pickerBtn,
+                        { borderColor: colors.border },
+                        isSelected && { backgroundColor: colors.secondary, borderColor: colors.secondary }
+                      ]}
+                      onPress={() => setSelectedDocType(req.documentType as DocType)}
+                    >
+                      <Text style={[
+                        typography.bodySmall,
+                        { color: isSelected ? colors.onSecondary : colors.text },
+                        isSelected && { fontWeight: '700' }
+                      ]}>
+                        {req.label}{req.isRequired ? ' *' : ''}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
 
-              <Pressable 
+              {/* Description of selected type */}
+              {(() => {
+                const selectedReq = visibleRequirements.find(r => r.documentType === selectedDocType);
+                if (!selectedReq) return null;
+                return (
+                  <Text style={[typography.caption, { color: colors.textSecondary, marginBottom: 12 }]}>
+                    {selectedReq.description}
+                  </Text>
+                );
+              })()}
+
+              <Pressable
                 style={[styles.uploadBtn, { backgroundColor: colors.secondary }]}
                 onPress={handlePickAndUpload}
                 disabled={isUploading}
@@ -174,16 +222,17 @@ export default function KycUploadScreen() {
                 ) : (
                   <>
                     <Ionicons name="cloud-upload" size={18} color={colors.onSecondary} style={{ marginRight: 8 }} />
-                    <Text style={[typography.buttonText, { color: colors.onSecondary }]}>Pick & Upload Document</Text>
+                    <Text style={[typography.buttonText, { color: colors.onSecondary }]}>
+                      Pick & Upload
+                    </Text>
                   </>
                 )}
               </Pressable>
             </View>
 
-            {/* Request review banner */}
-            {documents && documents.length > 0 && (
-              <Pressable 
-                style={[styles.reviewBtn, { backgroundColor: colors.text }]}
+            {hasRequiredDocs && (
+              <Pressable
+                style={[styles.submitBtn, { backgroundColor: colors.text }]}
                 onPress={handleRequestApproval}
                 disabled={requestApprovalMutation.isPending}
               >
@@ -192,45 +241,56 @@ export default function KycUploadScreen() {
                 ) : (
                   <>
                     <Ionicons name="checkbox" size={18} color={colors.surface} style={{ marginRight: 8 }} />
-                    <Text style={[typography.buttonText, { color: colors.surface }]}>Submit Profile for Verification Review</Text>
+                    <Text style={[typography.buttonText, { color: colors.surface }]}>
+                      Submit for Verification Review
+                    </Text>
                   </>
                 )}
               </Pressable>
             )}
 
             <Text style={[typography.h3, { color: colors.text, marginTop: spacing.lg, marginBottom: spacing.md }]}>
-              Uploaded Documents ({documents?.length || 0})
+              Document Status ({visibleRequirements.length})
             </Text>
           </>
         }
-        renderItem={({ item }) => {
-          const status = getStatusStyle(item.status);
+        renderItem={({ item: req }) => {
+          const doc = getUploadedDoc(req.documentType);
+          const statusStyle = getStatusStyle(doc?.status);
           return (
             <View style={[styles.docCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.docHeader}>
-                <Ionicons name="document-text" size={24} color={colors.textSecondary} />
+                <View style={[styles.docIconWrapper, { backgroundColor: statusStyle.bg }]}>
+                  <Ionicons name="document-text" size={20} color={statusStyle.text} />
+                </View>
                 <View style={{ flex: 1, marginLeft: 12 }}>
                   <Text style={[typography.bodyLarge, { color: colors.text, fontWeight: '700' }]}>
-                    {item.documentType.toUpperCase().replace('_', ' ')}
+                    {req.label}
+                    {req.isRequired && <Text style={{ color: colors.danger }}> *</Text>}
                   </Text>
                   <Text style={[typography.caption, { color: colors.textSecondary }]}>
-                    Uploaded: {new Date(item.uploadedAt).toLocaleDateString()}
+                    {doc
+                      ? `Uploaded: ${new Date(doc.uploadedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                      : 'Not yet uploaded'}
                   </Text>
                 </View>
-                <Pressable onPress={() => handleDelete(item._id)} style={{ padding: 4 }}>
-                  <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                </Pressable>
+                {doc && (
+                  <Pressable onPress={() => handleDelete(doc._id)} style={{ padding: 6 }}>
+                    <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                  </Pressable>
+                )}
               </View>
 
-              {/* Status indicator row */}
               <View style={styles.statusRow}>
-                <View style={[styles.statusPill, { backgroundColor: status.bg }]}>
-                  <Ionicons name={status.icon as any} size={12} color={status.text} />
-                  <Text style={[styles.statusText, { color: status.text }]}>{item.status.toUpperCase()}</Text>
+                <View style={[styles.statusPill, { backgroundColor: statusStyle.bg }]}>
+                  <Ionicons name={statusStyle.icon} size={11} color={statusStyle.text} />
+                  <Text style={[styles.statusText, { color: statusStyle.text }]}>
+                    {doc ? doc.status.toUpperCase().replace('_', ' ') : (req.isRequired ? 'REQUIRED' : 'OPTIONAL')}
+                  </Text>
                 </View>
-                {item.rejectionReason ? (
-                  <Text style={[typography.caption, { color: colors.danger, flex: 1, marginLeft: 10 }]} numberOfLines={2}>
-                    Reason: {item.rejectionReason}
+                {doc?.rejectionReason ? (
+                  <Text style={[typography.caption, { color: colors.danger, flex: 1, marginLeft: 10, lineHeight: 16 }]}>
+                    {doc.rejectionReason}
                   </Text>
                 ) : null}
               </View>
@@ -244,24 +304,32 @@ export default function KycUploadScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   scroll: { padding: 20, paddingBottom: 60 },
-  cardForm: {
+  resubmitBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+  },
+  card: {
     borderRadius: 16,
     borderWidth: 1,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  pickerContainer: {
+  picker: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginVertical: 12,
+    marginBottom: 10,
   },
   pickerBtn: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
   },
   uploadBtn: {
@@ -270,9 +338,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
-  reviewBtn: {
+  submitBtn: {
     height: 52,
     borderRadius: 12,
     flexDirection: 'row',
@@ -288,6 +356,13 @@ const styles = StyleSheet.create({
   },
   docHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
+  },
+  docIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   statusRow: {
@@ -308,3 +383,4 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
 });
+

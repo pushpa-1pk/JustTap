@@ -1,28 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, Pressable, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { Alert, StyleSheet, Text, View, Pressable, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useTheme } from '@/hooks/useTheme';
 import { useGetAddressesQuery } from '@/redux/api/profileApi';
+import { useGetServiceByIdQuery } from '@/redux/api/serviceApi';
 import { useCreateBookingMutation } from '@/redux/api/bookingApi';
-import SvgIcon from '@/components/common/SvgIcon';
 import * as Haptics from 'expo-haptics';
+import { getRequiredDeviceLocation } from '@/hooks/useDeviceLocation';
 
 // Validation Schema
 const bookingSchema = z.object({
   bookingType: z.enum(['INSTANT', 'SCHEDULED']),
   date: z.string().optional(),
   time: z.string().optional(),
-  additionalNotes: z.string().optional(),
-  couponCode: z.string().optional(),
+  additionalNotes: z.string().max(500, 'Description must be 500 characters or fewer.').optional(),
 });
 
 type FormData = z.infer<typeof bookingSchema>;
 
 export default function BookServiceScreen() {
-  const { colors, typography, spacing, border } = useTheme();
+  const { colors, typography, spacing } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{
     providerId: string;
@@ -35,37 +35,31 @@ export default function BookServiceScreen() {
 
   // Selected Address State
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
-  const [discountAmount, setDiscountAmount] = useState(0);
-  const [couponApplied, setCouponApplied] = useState(false);
-  const [couponError, setCouponError] = useState('');
-
+  const [confirmation, setConfirmation] = useState<FormData | null>(null);
+  const [confirmationKey, setConfirmationKey] = useState<string | null>(null);
+  const submissionLock = useRef(false);
   // API Queries & Mutations
   const { data: addressesRes, isLoading: isAddressesLoading } = useGetAddressesQuery();
+  const serviceQuery = useGetServiceByIdQuery(params.serviceId ?? '', { skip: !params.serviceId });
   const [createBooking, { isLoading: isCreatingBooking }] = useCreateBookingMutation();
 
   const addresses = addressesRes?.data || [];
-  const basePrice = Number(params.price || 499);
-  
-  // Dynamic pricing calculations
-  const platformFee = 29;
-  const taxRate = 0.18;
-  const taxableAmount = Math.max(0, basePrice - discountAmount);
-  const taxAmount = Math.round(taxableAmount * taxRate);
-  const finalAmount = taxableAmount + taxAmount + platformFee;
+  const basePrice = Number(params.price);
+  const hasValidPrice = Number.isFinite(basePrice) && basePrice > 0;
+  const service = serviceQuery.data?.data;
+  const serviceDurationMinutes = service?.estimatedDuration;
 
-  const { control, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormData>({
+  const { control, handleSubmit, watch } = useForm<FormData>({
     resolver: zodResolver(bookingSchema),
     defaultValues: {
       bookingType: 'INSTANT',
       date: new Date().toISOString().split('T')[0],
       time: '12:00',
       additionalNotes: '',
-      couponCode: '',
     }
   });
 
   const bookingType = watch('bookingType');
-  const enteredCoupon = watch('couponCode');
 
   // Pre-select primary address
   useEffect(() => {
@@ -75,46 +69,51 @@ export default function BookServiceScreen() {
     }
   }, [addresses]);
 
-  const handleApplyCoupon = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (enteredCoupon?.toUpperCase() === 'TAP20') {
-      const discount = Math.round(basePrice * 0.2); // 20% discount
-      setDiscountAmount(discount);
-      setCouponApplied(true);
-      setCouponError('');
-    } else {
-      setCouponError('Invalid coupon code');
-      setDiscountAmount(0);
-      setCouponApplied(false);
-    }
-  };
-
-  const onSubmit = async (data: FormData) => {
+  const createBookingRequest = async (data: FormData, idempotencyKey: string | null) => {
+    if (submissionLock.current) return;
+    submissionLock.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     
     const activeAddress = addresses.find(a => (a._id || a.id) === selectedAddressId);
     if (!activeAddress) {
-      alert('Please select a delivery address');
+      Alert.alert('Address required', 'Please select a saved service address before booking.');
+      submissionLock.current = false;
+      return;
+    }
+
+    if (!idempotencyKey || !params.serviceId || !params.providerServiceId || !service || !service.isActive || !hasValidPrice || !serviceDurationMinutes) {
+      Alert.alert('Service unavailable', 'This service no longer has a valid provider offer. Please return to search and select a provider again.');
+      submissionLock.current = false;
+      return;
+    }
+
+    const deviceLocation = await getRequiredDeviceLocation();
+    if (!deviceLocation) {
+      submissionLock.current = false;
       return;
     }
 
     try {
       // Resolve start/end times
-      let start = new Date();
+      let start = new Date(Date.now() + 20 * 60 * 1000);
       if (data.bookingType === 'SCHEDULED' && data.date && data.time) {
         start = new Date(`${data.date}T${data.time}:00.000Z`);
       }
+      if (Number.isNaN(start.getTime()) || start <= new Date()) {
+        Alert.alert('Invalid schedule', 'Choose a valid future date and time.');
+        submissionLock.current = false;
+        return;
+      }
       
-      const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
+      const end = new Date(start.getTime() + serviceDurationMinutes * 60 * 1000);
 
       const bookingPayload = {
+        idempotencyKey,
         serviceId: params.serviceId,
         providerServiceId: params.providerServiceId,
         bookingType: data.bookingType,
         scheduledStartTime: start.toISOString(),
         scheduledEndTime: end.toISOString(),
-        couponCode: couponApplied ? 'TAP20' : '',
-        couponDiscountAmount: discountAmount,
         customerAddressSnapshot: {
           label: activeAddress.label,
           addressLine1: activeAddress.addressLine1,
@@ -124,7 +123,7 @@ export default function BookServiceScreen() {
           pincode: activeAddress.pincode,
           location: {
             type: 'Point' as const,
-            coordinates: [activeAddress.longitude, activeAddress.latitude] as [number, number],
+            coordinates: [deviceLocation.longitude, deviceLocation.latitude] as [number, number],
           }
         },
         additionalNotes: data.additionalNotes || undefined
@@ -139,8 +138,24 @@ export default function BookServiceScreen() {
       }
     } catch (err: any) {
       console.error('Booking submission failed:', err);
+      Alert.alert('Booking not confirmed', err?.data?.message || (err?.status ? 'Your booking was not created. Please try again.' : 'We could not confirm whether the request reached the server. Check My Bookings before retrying to avoid a duplicate booking.'));
+    } finally {
+      submissionLock.current = false;
     }
   };
+
+  const openConfirmation = (data: FormData) => {
+    if (!selectedAddressId || !service || !service.isActive || !hasValidPrice) {
+      Alert.alert('Booking details incomplete', 'Select a valid address and service before confirming.');
+      return;
+    }
+    setConfirmation(data);
+    // Keep the same key after an uncertain network result. A retry therefore
+    // resolves to the original booking instead of submitting a second one.
+    setConfirmationKey((currentKey) => currentKey || `booking-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`);
+  };
+
+  const selectedAddress = addresses.find((address) => (address._id || address.id) === selectedAddressId);
 
   return (
     <KeyboardAvoidingView 
@@ -154,7 +169,8 @@ export default function BookServiceScreen() {
           <View style={styles.summaryCard}>
             <Text style={[typography.caption, { color: colors.textSecondary }]}>BOOKING SERVICE WITH</Text>
             <Text style={[typography.h2, { color: colors.text, marginTop: 4 }]}>{params.businessName}</Text>
-            <Text style={[typography.bodyMedium, { color: colors.secondary, fontWeight: '700' }]}>{params.serviceName}</Text>
+            <Text style={[typography.bodyMedium, { color: colors.secondary, fontWeight: '700' }]}>{service?.name || params.serviceName}</Text>
+            {serviceQuery.isLoading ? <ActivityIndicator size="small" color={colors.primary} /> : service && <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: 4 }]}>{service.estimatedDuration} minutes estimated</Text>}
           </View>
 
           {/* 1. Address Selection */}
@@ -273,53 +289,9 @@ export default function BookServiceScreen() {
             </View>
           )}
 
-          {/* 3. Coupon Codes Input */}
-          <Text style={[styles.sectionTitle, typography.h3, { color: colors.text, marginTop: spacing.lg }]}>
-            Apply Promo Code
-          </Text>
-          <View style={styles.couponRow}>
-            <Controller
-              control={control}
-              name="couponCode"
-              render={({ field: { onChange, onBlur, value } }) => (
-                <TextInput
-                  style={[
-                    styles.couponInput, 
-                    typography.bodyLarge, 
-                    { 
-                      backgroundColor: colors.surface, 
-                      borderColor: couponError ? colors.danger : colors.border,
-                      color: colors.text
-                    }
-                  ]}
-                  placeholder="Enter Promo Code"
-                  placeholderTextColor={colors.textSecondary}
-                  autoCapitalize="characters"
-                  onBlur={onBlur}
-                  onChangeText={onChange}
-                  value={value}
-                />
-              )}
-            />
-            <Pressable 
-              style={[styles.couponBtn, { backgroundColor: colors.secondary }]}
-              onPress={handleApplyCoupon}
-            >
-              <Text style={[typography.buttonText, { color: colors.onSecondary, fontSize: 14 }]}>Apply</Text>
-            </Pressable>
-          </View>
-          {couponApplied && (
-            <Text style={[typography.bodySmall, { color: colors.secondary, marginTop: 4, fontWeight: '600' }]}>
-              Success! 20% discount applied.
-            </Text>
-          )}
-          {couponError !== '' && (
-            <Text style={[typography.bodySmall, { color: colors.danger, marginTop: 4 }]}>
-              {couponError}
-            </Text>
-          )}
+          {/* Promotions are intentionally omitted until server-side validation and redemption are available. */}
 
-          {/* 4. Notes input */}
+          {/* 3. Notes input */}
           <Text style={[styles.sectionTitle, typography.h3, { color: colors.text, marginTop: spacing.lg }]}>
             Additional Notes
           </Text>
@@ -337,52 +309,31 @@ export default function BookServiceScreen() {
                 placeholderTextColor={colors.textSecondary}
                 multiline
                 numberOfLines={3}
+                maxLength={500}
                 onBlur={onBlur}
                 onChangeText={onChange}
                 value={value}
               />
             )}
           />
+          <Text style={[typography.caption, { color: colors.textSecondary, marginTop: 4 }]}>Maximum 500 characters. This is also validated by the backend.</Text>
 
-          {/* 5. Cost Summary Card */}
+          {/* 4. Cost Summary Card */}
           <View style={[styles.billCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[typography.h3, { color: colors.text, marginBottom: spacing.md }]}>Price Details</Text>
             
             <View style={styles.billRow}>
               <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>Service Rate</Text>
-              <Text style={[typography.bodyMedium, { color: colors.text }]}>₹{basePrice}</Text>
+              <Text style={[typography.bodyMedium, { color: colors.text }]}>{hasValidPrice ? `₹${basePrice}` : 'Unavailable'}</Text>
             </View>
-            
-            {couponApplied && (
-              <View style={styles.billRow}>
-                <Text style={[typography.bodyMedium, { color: colors.secondary }]}>TAP20 Discount (20%)</Text>
-                <Text style={[typography.bodyMedium, { color: colors.secondary }]}>- ₹{discountAmount}</Text>
-              </View>
-            )}
-
-            <View style={styles.billRow}>
-              <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>Taxes & GST (18%)</Text>
-              <Text style={[typography.bodyMedium, { color: colors.text }]}>₹{taxAmount}</Text>
-            </View>
-
-            <View style={styles.billRow}>
-              <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>Convenience Fee</Text>
-              <Text style={[typography.bodyMedium, { color: colors.text }]}>₹{platformFee}</Text>
-            </View>
-
-            <View style={[styles.billDivider, { backgroundColor: colors.border }]} />
-
-            <View style={styles.billRow}>
-              <Text style={[typography.h2, { color: colors.text, fontWeight: '700' }]}>Total Amount</Text>
-              <Text style={[typography.h1, { color: colors.secondary, fontWeight: '800' }]}>₹{finalAmount}</Text>
-            </View>
+            <Text style={[typography.bodySmall, { color: colors.textSecondary, marginTop: spacing.sm }]}>The final price, taxes, travel charge, and eligible promotions are calculated securely by the server when the booking is created.</Text>
           </View>
 
           {/* Place Booking Trigger */}
           <Pressable
             style={[styles.bookingBtn, { backgroundColor: colors.primary, marginTop: spacing.xl }]}
-            onPress={handleSubmit(onSubmit)}
-            disabled={isCreatingBooking}
+            onPress={handleSubmit(openConfirmation)}
+            disabled={isCreatingBooking || serviceQuery.isLoading || !service?.isActive}
           >
             {isCreatingBooking ? (
               <ActivityIndicator size="small" color={colors.onPrimary} />
@@ -393,10 +344,32 @@ export default function BookServiceScreen() {
             )}
           </Pressable>
 
+          {confirmation && selectedAddress && service && (
+            <View style={[styles.confirmationCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              <Text style={[typography.h3, { color: colors.text }]}>Review your booking</Text>
+              <SummaryRow label="Service" value={service.name} />
+              <SummaryRow label="Provider" value={params.businessName} />
+              <SummaryRow label="Address" value={`${selectedAddress.addressLine1}, ${selectedAddress.city}`} />
+              <SummaryRow label="Schedule" value={confirmation.bookingType === 'INSTANT' ? 'Instant booking' : `${confirmation.date} ${confirmation.time}`} />
+              <SummaryRow label="Duration" value={`${service.estimatedDuration} minutes`} />
+              <SummaryRow label="Provider offer" value={`₹${basePrice}`} />
+              <SummaryRow label="Notes" value={confirmation.additionalNotes?.trim() || 'None'} />
+              <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.sm }]}>The final total and provider availability are verified by the server.</Text>
+              <View style={styles.confirmActions}>
+                <Pressable onPress={() => { setConfirmation(null); setConfirmationKey(null); }} style={[styles.editBtn, { borderColor: colors.border }]}><Text style={{ color: colors.text }}>Edit</Text></Pressable>
+                <Pressable onPress={() => { const data = confirmation; const key = confirmationKey; setConfirmation(null); void createBookingRequest(data, key); }} disabled={isCreatingBooking} style={[styles.confirmBtn, { backgroundColor: colors.primary }]}>{isCreatingBooking ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={{ color: colors.onPrimary, fontWeight: '700' }}>Confirm booking</Text>}</Pressable>
+              </View>
+            </View>
+          )}
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return <View style={styles.summaryRow}><Text style={styles.summaryLabel}>{label}</Text><Text style={styles.summaryValue}>{value}</Text></View>;
 }
 
 const styles = StyleSheet.create({
@@ -518,4 +491,11 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 4,
   },
+  confirmationCard: { marginTop: 18, borderRadius: 16, borderWidth: 1, padding: 16 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 10 },
+  summaryLabel: { color: '#64748B', flex: 1 },
+  summaryValue: { color: '#0F172A', flex: 1, textAlign: 'right', fontWeight: '600' },
+  confirmActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  editBtn: { flex: 1, height: 46, borderWidth: 1, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  confirmBtn: { flex: 1, height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
 });

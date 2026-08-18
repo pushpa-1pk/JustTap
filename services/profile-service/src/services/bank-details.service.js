@@ -36,7 +36,7 @@ const maskAccountNumber = (accountNumber) => {
     return accountNumber;
   }
 
-  return `${"*".repeat(accountNumber.length - 4)}${accountNumber.slice(-4)}`;
+  return `${"•".repeat(accountNumber.length - 4)}${accountNumber.slice(-4)}`;
 };
 
 class BankDetailsService {

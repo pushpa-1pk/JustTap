@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { AdminSubRole, logoutSession } from '../redux/slices/authSlice';
@@ -57,10 +58,10 @@ export const useAuth = () => {
     return permissions.includes(permission);
   };
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     dispatch(logoutSession());
     navigate('/login');
-  };
+  }, [dispatch, navigate]);
 
   return {
     isAuthenticated,

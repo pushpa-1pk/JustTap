@@ -23,37 +23,11 @@ export default function DashboardPage() {
     pollingInterval: 30000 // Poll health statuses every 30 seconds
   });
 
-  // Mock revenue history data
-  const revenueHistory = [
-    { name: '01 Aug', revenue: 98000, commission: 19600 },
-    { name: '02 Aug', revenue: 104000, commission: 20800 },
-    { name: '03 Aug', revenue: 112000, commission: 22400 },
-    { name: '04 Aug', revenue: 95000, commission: 19000 },
-    { name: '05 Aug', revenue: 125000, commission: 25000 },
-    { name: '06 Aug', revenue: 138000, commission: 27600 },
-    { name: '07 Aug', revenue: 145290, commission: 29058 },
-  ];
-
-  // Category distribution representation
-  const categoryData = [
-    { name: 'Electrical', value: 400 },
-    { name: 'Cleaning', value: 300 },
-    { name: 'Plumbing', value: 240 },
-    { name: 'Pest Control', value: 180 },
-    { name: 'Appliance Repair', value: 290 },
-  ];
+  const revenueHistory = analytics?.revenueHistory || [];
+  const categoryData = analytics?.categoryData || [];
+  const bookingStatusData = analytics?.bookingStatusData || [];
   
   const COLORS = ['#6366f1', '#10b981', '#3b82f6', '#f59e0b', '#ec4899'];
-
-  // Status mapping from analytics query or mock
-  const bookingStatusData = [
-    { name: 'Requested', count: analytics?.requestedCount || 12 },
-    { name: 'Accepted', count: analytics?.acceptedCount || 8 },
-    { name: 'Arrived', count: analytics?.arrivedCount || 5 },
-    { name: 'Started', count: analytics?.startedCount || 14 },
-    { name: 'Completed', count: analytics?.completedCount || 145 },
-    { name: 'Cancelled', count: analytics?.cancelledCount || 10 },
-  ];
 
   return (
     <div className="space-y-6">
@@ -80,7 +54,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-start">
             <div className="space-y-1">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Revenue (Today)</span>
-              <h3 className="text-2xl font-extrabold font-heading">₹145,290</h3>
+              <h3 className="text-2xl font-extrabold font-heading">₹{analytics?.grossRevenue?.toLocaleString() || '0'}</h3>
             </div>
             <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
               <BadgeDollarSign className="w-5 h-5" />
@@ -99,7 +73,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-start">
             <div className="space-y-1">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Commission (20%)</span>
-              <h3 className="text-2xl font-extrabold font-heading">₹29,058</h3>
+              <h3 className="text-2xl font-extrabold font-heading">₹{analytics?.commission?.toLocaleString() || '0'}</h3>
             </div>
             <div className="w-10 h-10 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
               <TrendingUp className="w-5 h-5" />
@@ -119,7 +93,7 @@ export default function DashboardPage() {
             <div className="space-y-1">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Active Bookings</span>
               <h3 className="text-2xl font-extrabold font-heading">
-                {analyticsLoading ? '...' : (analytics?.total || 184)}
+                {analyticsLoading ? '...' : (analytics?.totalActive || 0)}
               </h3>
             </div>
             <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
@@ -194,7 +168,7 @@ export default function DashboardPage() {
                 <YAxis stroke="#94a3b8" fontSize={10} tickLine={false} axisLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }} />
                 <Bar name="Bookings count" dataKey="count" fill="#4f46e5" radius={[4, 4, 0, 0]}>
-                  {bookingStatusData.map((entry, index) => (
+                  {bookingStatusData.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.name === 'Completed' ? '#10b981' : entry.name === 'Cancelled' ? '#ef4444' : '#6366f1'} />
                   ))}
                 </Bar>
@@ -221,7 +195,7 @@ export default function DashboardPage() {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {categoryData.map((entry, index) => (
+                  {categoryData.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
@@ -230,7 +204,7 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </div>
           <div className="grid grid-cols-3 gap-2 text-[10px] text-muted-foreground pt-4 border-t border-border/50">
-            {categoryData.map((entry, idx) => (
+            {categoryData.map((entry: any, idx: number) => (
               <div key={idx} className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                 <span className="truncate">{entry.name}</span>

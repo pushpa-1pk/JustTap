@@ -148,6 +148,7 @@ const normalizeBookingCollection = (payload: unknown): Booking[] => {
 export const bookingApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     createBooking: builder.mutation<{ success: boolean; data: Booking }, {
+      idempotencyKey: string;
       serviceId: string;
       providerServiceId: string;
       bookingType: 'INSTANT' | 'SCHEDULED';
@@ -158,10 +159,11 @@ export const bookingApi = baseApi.injectEndpoints({
       customerAddressSnapshot: Booking['customerAddressSnapshot'];
       additionalNotes?: string;
     }>({
-      query: (body) => ({
+      query: ({ idempotencyKey, ...body }) => ({
         url: '/bookings/customer',
         method: 'POST',
         data: body,
+        headers: { 'Idempotency-Key': idempotencyKey },
       }),
       transformResponse: (response: { success: boolean; data: RawBooking }) => ({
         ...response,

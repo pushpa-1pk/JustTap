@@ -29,8 +29,8 @@ class ProviderBookingQueryController {
 
   listPastLogs = async (req, res, next) => {
     try {
-      const { page, limit } = req.query;
-      const result = await this.providerQueryService.getHistoryLog(req.user.userId, page, limit);
+      const { page, limit, status, search } = req.query;
+      const result = await this.providerQueryService.getHistoryLog(req.user.userId, { page, limit, status, search });
       return ApiResponse.success(res, 200, 'Provider booking history retrieved.', result);
     } catch (error) {
       next(error);

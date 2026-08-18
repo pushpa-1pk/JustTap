@@ -19,6 +19,11 @@ class BookingEventService {
     const outboxPayload = {
       bookingId,
       eventType: eventType.toUpperCase(),
+      // Booking creation is a one-time domain event. This unique database key
+      // protects downstream notifications if a caller is ever replayed.
+      dedupeKey: eventType.toUpperCase() === 'BOOKING_CREATED'
+        ? `${bookingId}:BOOKING_CREATED`
+        : null,
       payload: {
         bookingId,
         customerId: booking?.customerId ? String(booking.customerId) : null,

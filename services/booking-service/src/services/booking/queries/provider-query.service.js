@@ -36,13 +36,22 @@ class ProviderQueryService {
   /**
    * Fetches full historical fulfillment ledger sets for a provider
    */
-  async getHistoryLog(providerId, page = 1, limit = 10) {
+  async getHistoryLog(providerId, { page = 1, limit = 10, status = null, search = '' } = {}) {
     const filter = {
       providerId,
-      bookingStatus: {
-        $in: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, BOOKING_STATUS.FAILED]
-      }
+      bookingStatus: status 
+        ? status.toUpperCase()
+        : { $in: [BOOKING_STATUS.COMPLETED, BOOKING_STATUS.CANCELLED, BOOKING_STATUS.FAILED] }
     };
+
+    if (search) {
+      filter.$or = [
+        { 'serviceDetails.name': { $regex: search, $options: 'i' } },
+        { 'customerSnapshot.fullName': { $regex: search, $options: 'i' } },
+        { bookingNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+
     return this.bookingRepo.findPaginated(filter, { page, limit });
   }
 }

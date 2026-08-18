@@ -5,6 +5,8 @@ export interface Category {
   name: string;
   slug: string;
   description: string;
+  icon?: string;
+  bannerImage?: string;
   isActive: boolean;
 }
 
@@ -17,6 +19,8 @@ export interface ServiceItem {
   estimatedDuration: number;
   isPopular: boolean;
   isActive: boolean;
+  icon?: string;
+  image?: string;
 }
 
 export interface ProviderOffer {
@@ -78,6 +82,7 @@ export const serviceApi = baseApi.injectEndpoints({
         data: normalizeListPayload(response.data),
       }),
       providesTags: ['Categories'],
+      keepUnusedDataFor: 300, // Cache for 5 minutes to avoid redundant loads
     }),
 
     // Services Public Catalog
@@ -92,6 +97,7 @@ export const serviceApi = baseApi.injectEndpoints({
         data: normalizeListPayload(response.data),
       }),
       providesTags: ['Services'],
+      keepUnusedDataFor: 300, // Cache for 5 minutes to avoid redundant loads
     }),
     getServiceById: builder.query<{ success: boolean; data: ServiceItem }, string>({
       query: (serviceId) => ({ url: `/services/${serviceId}`, method: 'GET' }),

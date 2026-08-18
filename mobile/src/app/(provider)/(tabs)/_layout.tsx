@@ -2,9 +2,11 @@ import { Tabs } from 'expo-router';
 import { useTheme } from '@/hooks/useTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function ProviderTabsLayout() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Tabs
@@ -32,6 +34,7 @@ export default function ProviderTabsLayout() {
           shadowOpacity: 0.06,
           shadowRadius: 8,
         },
+        headerStatusBarHeight: insets.top + 12,
         headerStyle: {
           backgroundColor: colors.background,
         },
@@ -46,6 +49,7 @@ export default function ProviderTabsLayout() {
         name="dashboard"
         options={{
           title: 'Dashboard',
+          headerShown: false,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'speedometer' : 'speedometer-outline'} color={color} size={22} />
           ),
@@ -55,6 +59,7 @@ export default function ProviderTabsLayout() {
         name="jobs"
         options={{
           title: 'Jobs',
+          headerShown: false,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'briefcase' : 'briefcase-outline'} color={color} size={22} />
           ),
@@ -73,6 +78,7 @@ export default function ProviderTabsLayout() {
         name="earnings"
         options={{
           title: 'Earnings',
+          headerShown: false,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons name={focused ? 'cash' : 'cash-outline'} color={color} size={22} />
           ),

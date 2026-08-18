@@ -104,8 +104,8 @@ class ProviderProfileService {
       if (error instanceof ApiError) {
         throw error;
       }
-      logger.error("UPDATE_PROVIDER_PROFILE_ERROR", { error: error.message });
-      throw new ApiError(500, "Failed to update profile");
+      logger.error("UPDATE_PROVIDER_PROFILE_ERROR", { error: error.stack || error.message });
+      throw new ApiError(500, "Failed to update profile: " + (error.stack || error.message));
     }
   }
 

@@ -1,6 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../config/axios';
 import { store } from '../redux/store';
+import { dashboardApi } from '../api/dashboardApi';
+import { jobsApi } from '../api/jobsApi';
 
 export interface ProviderProfile {
   userId: string;
@@ -38,6 +40,9 @@ export interface ProviderProfile {
     phone: string;
     relationship: string;
   };
+  rejectionReason?: string;
+  createdAt?: string;
+  services?: Array<{ id: string; name: string; category: string; priceRange?: string }>;
 }
 
 export interface ProviderBankDetails {
@@ -93,6 +98,13 @@ export interface ProviderTransaction {
   description: string;
   status: 'SUCCESS' | 'PENDING' | 'FAILED';
   createdAt: string;
+}
+
+export interface KycRequirement {
+  documentType: 'aadhar' | 'pan' | 'profile_photo' | 'trade_license' | 'gst' | 'shop_license';
+  label: string;
+  isRequired: boolean;
+  description: string;
 }
 
 export interface ProviderBooking {
@@ -159,6 +171,18 @@ export interface NotificationPreferences {
 
 // --- HOOKS IMPLEMENTATION ---
 
+// Hook: Get KYC document requirements from backend
+export function useGetKycRequirements() {
+  return useQuery<KycRequirement[]>({
+    queryKey: ['provider', 'kyc', 'requirements'],
+    queryFn: async () => {
+      const res = await apiClient.get('/provider/kyc/requirements');
+      return res.data?.data as KycRequirement[];
+    },
+    staleTime: 60 * 60 * 1000, // 1 hour — rarely changes
+  });
+}
+
 // Hook: Get Provider Profile
 export function useGetProviderProfile() {
   return useQuery({
@@ -212,7 +236,19 @@ export function useUpdateProviderProfile() {
 
       // Execute personal updates if present
       if (Object.keys(personalPayload).length > 0) {
-        await apiClient.put('/profiles/customer', personalPayload);
+        try {
+          await apiClient.put('/profiles/customer', personalPayload);
+        } catch (err: any) {
+          if (err.response?.status === 404) {
+            await apiClient.post('/profiles/customer', {
+              ...personalPayload,
+              fullName: personalPayload.fullName || 'Provider User',
+              language: personalPayload.language || 'English',
+            });
+          } else {
+            throw err;
+          }
+        }
       }
 
       // Execute provider updates if present
@@ -662,3 +698,39 @@ export function useUpdateNotificationPreferences() {
     },
   });
 }
+
+// Hook: Get Provider Dashboard Data
+export function useGetDashboardData() {
+  return useQuery({
+    queryKey: ['provider', 'dashboard'],
+    queryFn: async () => {
+      return await dashboardApi.getDashboardData();
+    },
+  });
+}
+
+// Hook: Get Provider Jobs (RTK-Query to React Query Migration)
+export function useGetProviderJobs(params: { status: string; page?: number; limit?: number; search?: string }) {
+  return useQuery({
+    queryKey: ['provider', 'jobs', params.status, params.page, params.search],
+    queryFn: async () => {
+      return await jobsApi.getProviderJobs(params);
+    },
+  });
+}
+
+// Hook: Update Provider Job Status
+export function useUpdateJobStatusMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ jobId, nextStatus }: { jobId: string; nextStatus: any }) => {
+      return await jobsApi.updateJobStatus(jobId, nextStatus);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['provider', 'jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['provider', 'dashboard'] });
+    },
+  });
+}
+
+

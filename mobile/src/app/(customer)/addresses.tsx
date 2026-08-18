@@ -24,6 +24,8 @@ import {
   Address,
 } from '@/hooks/useProfile';
 import { useTheme } from '@/hooks/useTheme';
+import { getRequiredDeviceLocation } from '@/hooks/useDeviceLocation';
+import * as Location from 'expo-location';
 
 export default function AddressesScreen() {
   const { colors, typography, spacing } = useTheme();
@@ -50,6 +52,8 @@ export default function AddressesScreen() {
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
   const [pincode, setPincode] = useState('');
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
 
   const openAddModal = () => {
     setEditingAddress(null);
@@ -60,6 +64,7 @@ export default function AddressesScreen() {
     setCity('');
     setState('');
     setPincode('');
+    setCoordinates(null);
     setModalVisible(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -73,6 +78,7 @@ export default function AddressesScreen() {
     setCity(addr.city);
     setState(addr.state);
     setPincode(addr.pincode);
+    setCoordinates(Number.isFinite(addr.latitude) && Number.isFinite(addr.longitude) ? { latitude: addr.latitude, longitude: addr.longitude } : null);
     setModalVisible(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
@@ -81,6 +87,15 @@ export default function AddressesScreen() {
     if (!addressLine1.trim() || !city.trim() || !state.trim() || !pincode.trim()) {
       Alert.alert('Incomplete Form', 'Please fill in all required fields (Address line 1, City, State, Pincode).');
       return;
+    }
+
+    let location = coordinates;
+    if (!location) {
+      setIsLocating(true);
+      location = await getRequiredDeviceLocation();
+      setIsLocating(false);
+      if (!location) return;
+      setCoordinates(location);
     }
 
     setIsSubmitting(true);
@@ -93,8 +108,8 @@ export default function AddressesScreen() {
       state: state.trim(),
       pincode: pincode.trim(),
       country: 'India',
-      latitude: 19.076, // fallback
-      longitude: 72.8777, // fallback
+      latitude: location.latitude,
+      longitude: location.longitude,
     };
 
     try {
@@ -354,6 +369,60 @@ export default function AddressesScreen() {
                 onChangeText={pincode => setPincode(pincode)}
               />
 
+              <Pressable 
+                onPress={async () => { 
+                  setIsLocating(true); 
+                  const location = await getRequiredDeviceLocation(); 
+                  setIsLocating(false); 
+                  if (location) {
+                    setCoordinates(location);
+                    try {
+                      const geocode = await Location.reverseGeocodeAsync({
+                        latitude: location.latitude,
+                        longitude: location.longitude,
+                      });
+                      if (geocode && geocode.length > 0) {
+                        const addr = geocode[0];
+                        // Automatically fill the fields:
+                        if (addr.streetNumber || addr.street || addr.name) {
+                          const streetVal = [addr.streetNumber, addr.street, addr.name]
+                            .filter(Boolean)
+                            .join(', ');
+                          setAddressLine1(streetVal);
+                        } else if (addr.district) {
+                          setAddressLine1(addr.district);
+                        }
+                        
+                        if (addr.subregion || addr.district) {
+                          setAddressLine2([addr.subregion, addr.district].filter(Boolean).join(', '));
+                        }
+                        
+                        if (addr.city) {
+                          setCity(addr.city);
+                        } else if (addr.subregion) {
+                          setCity(addr.subregion);
+                        }
+                        
+                        if (addr.region) {
+                          setState(addr.region);
+                        }
+                        
+                        if (addr.postalCode) {
+                          setPincode(addr.postalCode);
+                        }
+                      }
+                    } catch (e) {
+                      console.warn('Reverse geocode error:', e);
+                    }
+                  } 
+                }} 
+                disabled={isLocating || isSubmitting} 
+                style={[styles.locationBtn, { borderColor: colors.primary }]}
+              >
+                {isLocating ? <ActivityIndicator color={colors.primary} /> : <><Ionicons name="locate-outline" size={18} color={colors.primary} /><Text style={{ color: colors.primary, fontWeight: '700' }}>{coordinates ? 'Location captured' : 'Use my current location'}</Text></>}
+              </Pressable>
+              {!coordinates && <Text style={styles.locationHint}>A real GPS location is required before this address can be saved.</Text>}
+
               <Pressable
                 onPress={handleSaveAddress}
                 disabled={isSubmitting}
@@ -550,4 +619,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '900',
   },
+  locationBtn: { height: 46, borderWidth: 1, borderRadius: 10, marginTop: 16, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
+  locationHint: { marginTop: 8, color: '#64748B', fontSize: 12 },
 });

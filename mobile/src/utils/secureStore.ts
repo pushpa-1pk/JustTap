@@ -4,6 +4,8 @@ import { Platform } from 'react-native';
 const KEY_ACCESS_TOKEN = 'justtap_access_token';
 const KEY_REFRESH_TOKEN = 'justtap_refresh_token';
 const KEY_USER_ROLE = 'justtap_user_role';
+const KEY_USER = 'justtap_user';
+const KEY_DEVICE_ID = 'justtap_device_id';
 
 const isWeb = Platform.OS === 'web';
 
@@ -78,8 +80,41 @@ export const secureStore = {
       await storage.deleteItemAsync(KEY_ACCESS_TOKEN);
       await storage.deleteItemAsync(KEY_REFRESH_TOKEN);
       await storage.deleteItemAsync(KEY_USER_ROLE);
+      await storage.deleteItemAsync(KEY_USER);
     } catch (error) {
       console.error('Failed to clear secure storage:', error);
+    }
+  },
+
+  async saveUser(user: unknown): Promise<void> {
+    try {
+      await storage.setItemAsync(KEY_USER, JSON.stringify(user));
+    } catch (error) {
+      console.error('Failed to save authenticated user:', error);
+    }
+  },
+
+  async getUser<T>(): Promise<T | null> {
+    try {
+      const rawUser = await storage.getItemAsync(KEY_USER);
+      return rawUser ? JSON.parse(rawUser) as T : null;
+    } catch (error) {
+      console.error('Failed to retrieve authenticated user:', error);
+      return null;
+    }
+  },
+
+  async getDeviceId(): Promise<string> {
+    try {
+      const existingId = await storage.getItemAsync(KEY_DEVICE_ID);
+      if (existingId) return existingId;
+
+      const deviceId = `justtap-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+      await storage.setItemAsync(KEY_DEVICE_ID, deviceId);
+      return deviceId;
+    } catch (error) {
+      console.error('Failed to retrieve device identifier:', error);
+      return 'justtap-unknown-device';
     }
   },
 };

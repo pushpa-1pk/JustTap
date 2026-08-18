@@ -17,13 +17,15 @@ export default function ProviderDetailsScreen() {
     experience?: string;
     rating?: string;
     distance?: string;
+    latitude?: string;
+    longitude?: string;
     serviceId: string;
     serviceName?: string;
   }>();
 
-  // Mock location for map centering (Mumbai coordinates near coordinates returned by APIs)
-  const providerLat = 19.0800; 
-  const providerLng = 72.8800;
+  const providerLat = Number(params.latitude);
+  const providerLng = Number(params.longitude);
+  const hasProviderLocation = Number.isFinite(providerLat) && Number.isFinite(providerLng);
 
   const handleProceedBooking = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -43,15 +45,7 @@ export default function ProviderDetailsScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Map View Section */}
-        <View style={styles.mapContainer}>
-          <MapViewComponent
-            latitude={providerLat}
-            longitude={providerLng}
-            title={params.businessName}
-            description={params.serviceName || 'Service Provider'}
-          />
-        </View>
+        {hasProviderLocation ? <View style={styles.mapContainer}><MapViewComponent latitude={providerLat} longitude={providerLng} title={params.businessName} description={params.serviceName || 'Service Provider'} /></View> : <View style={styles.locationUnavailable}><Text>Provider location is not available.</Text></View>}
 
         {/* Profile Details */}
         <View style={[styles.detailsBox, { backgroundColor: colors.surface }]}>
@@ -134,6 +128,11 @@ const styles = StyleSheet.create({
   mapContainer: {
     height: 220,
     width: '100%',
+  },
+  locationUnavailable: {
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   map: {
     ...StyleSheet.absoluteFillObject,

@@ -70,7 +70,10 @@ export const getAbsoluteUrl = (url: string): string => {
   if (
     url.startsWith('/payments') ||
     url.startsWith('/wallet') ||
-    url.startsWith('/withdrawals')
+    url.startsWith('/withdrawals') ||
+    url.startsWith('/methods') ||
+    url.startsWith('/coupons') ||
+    url.startsWith('/invoices')
   ) {
     return `${ENV.PAYMENT_SERVICE_URL}/api/v1${url}`;
   }
@@ -185,7 +188,7 @@ apiClient.interceptors.response.use(
         const refreshUrl = getAbsoluteUrl('/auth/refresh-token');
         const refreshResponse = await axios.post(refreshUrl, {
           refreshToken,
-          deviceId: 'mobile-app-client',
+          deviceId: await secureStore.getDeviceId(),
           deviceName: 'JustTap Mobile',
           platform: getAuthPlatform(),
         });
@@ -194,6 +197,11 @@ apiClient.interceptors.response.use(
         
         // Save new tokens
         await secureStore.saveTokens(newAccessToken, newRefreshToken);
+        const { store } = require('../redux/store');
+        const currentUser = store.getState()?.auth?.user;
+        if (currentUser) {
+          await secureStore.saveUser(currentUser);
+        }
         
         // Resume queued requests
         processQueue(null, newAccessToken);
@@ -209,8 +217,7 @@ apiClient.interceptors.response.use(
         // Clean tokens on failure and trigger logout redirect
         await secureStore.clearAll();
         
-        // Dispatch logout event through a global custom event or directly to Redux store
-        // We import the store dynamically to avoid circular dependencies
+        // Dispatch logout event through Redux after clearing the invalid session.
         const { store } = require('../redux/store');
         const { logout } = require('../redux/slices/authSlice');
         if (store && logout) {

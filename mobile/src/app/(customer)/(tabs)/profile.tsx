@@ -146,9 +146,6 @@ export default function CustomerProfileScreen() {
               )}
             </View>
 
-            {customerId ? (
-              <Text style={[styles.customerId, { color: colors.textSecondary }]}>{customerId}</Text>
-            ) : null}
             <Text style={[styles.contactInfo, { color: colors.textSecondary }]}>
               +91 {user?.phone}
             </Text>
@@ -157,9 +154,6 @@ export default function CustomerProfileScreen() {
                 {profile.email}
               </Text>
             ) : null}
-            <Text style={[styles.memberSince, { color: colors.textSecondary }]}>
-              Member Since: {memberSince}
-            </Text>
           </View>
         </View>
 
@@ -167,11 +161,16 @@ export default function CustomerProfileScreen() {
           onPress={() => router.push('/edit-profile')}
           style={({ pressed }) => [
             styles.editBtn,
-            { borderColor: colors.primary },
-            pressed && { backgroundColor: colors.primary + '10' },
+            { 
+              borderColor: profile ? colors.primary : '#EF4444',
+              backgroundColor: profile ? 'transparent' : '#EF444410'
+            },
+            pressed && { backgroundColor: profile ? colors.primary + '10' : '#EF444420' },
           ]}
         >
-          <Text style={[styles.editBtnText, { color: colors.primary }]}>Edit Profile</Text>
+          <Text style={[styles.editBtnText, { color: profile ? colors.primary : '#EF4444', fontWeight: profile ? '600' : '800' }]}>
+            {profile ? 'Edit Profile' : '⚠️ Complete Profile'}
+          </Text>
         </Pressable>
       </View>
 

@@ -151,8 +151,8 @@ class AdminService {
     };
   }
 
-  async verifyDocument(documentId, reviewedBy, isApproved) {
-    return documentService.verifyDocument(documentId, isApproved, reviewedBy);
+  async verifyDocument(documentId, reviewedBy, isApproved, rejectionReason = null) {
+    return documentService.verifyDocument(documentId, isApproved, reviewedBy, rejectionReason);
   }
 }
 

@@ -93,6 +93,49 @@ class ProviderProfileController {
     res.status(200).json(new ApiResponse(200, "Provider online status updated successfully", profile));
   });
 
+  getKycRequirements = asyncHandler(async (req, res) => {
+    const requirements = [
+      {
+        documentType: "aadhar",
+        label: "Aadhar Card",
+        isRequired: true,
+        description: "National identity card (Front and Back)",
+      },
+      {
+        documentType: "pan",
+        label: "PAN Card",
+        isRequired: true,
+        description: "Permanent Account Number card",
+      },
+      {
+        documentType: "profile_photo",
+        label: "Profile Photo",
+        isRequired: true,
+        description: "Clear photo of your face for customer trust",
+      },
+      {
+        documentType: "gst",
+        label: "GSTIN Registration",
+        isRequired: false,
+        description: "Goods and Services Tax registration document",
+      },
+      {
+        documentType: "trade_license",
+        label: "Trade/Professional License",
+        isRequired: false,
+        description: "Business trade license",
+      },
+      {
+        documentType: "shop_license",
+        label: "Shop & Establishment License",
+        isRequired: false,
+        description: "Shop registration certificate",
+      }
+    ];
+
+    res.status(200).json(new ApiResponse(200, "KYC requirements retrieved successfully", requirements));
+  });
+
   requestApproval = asyncHandler(async (req, res) => {
     const approvalRequest = await providerProfileService.requestApproval(req.user.id);
     res.status(200).json(new ApiResponse(200, "Approval requested successfully", approvalRequest));
