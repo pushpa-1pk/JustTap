@@ -2,25 +2,25 @@ const env = require("../config/env");
 const logger = require("../config/logger");
 
 const errorHandler = (err, req, res, next) => {
-  const statusCode = err.statusCode || 500;
-  
-  const responsePayload = {
-    success: false,
-    message: err.message || "Internal Discovery Cluster State Failure Context",
-    errors: err.errors || []
-  };
+  const statusCode = err.statusCode || err.status || 500;
 
-  if (env.nodeEnv === "development") {
-    responsePayload.stack = err.stack;
-  }
-
-  logger.error("Matching service exception intercepted", {
+  logger.error("REQUEST_FAILED", {
     statusCode,
     message: err.message,
-    errors: err.errors,
     path: req.originalUrl,
-    method: req.method
+    method: req.method,
+    stack: err.stack,
   });
+
+  const responsePayload = {
+    success: false,
+    message: err.message || "Internal Server Error",
+    requestId: req.headers["x-request-id"] || req.requestId || null,
+  };
+
+  if (env.NODE_ENV === "development") {
+    responsePayload.stack = err.stack;
+  }
 
   res.status(statusCode).json(responsePayload);
 };

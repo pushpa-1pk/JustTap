@@ -16,7 +16,9 @@ function getBearerToken(req) {
   return token;
 }
 
-function verifyAuthenticationToken(req, res, next) {
+const { redisClient } = require("../config/redis");
+
+async function verifyAuthenticationToken(req, res, next) {
   try {
     const token = getBearerToken(req);
     const payload = jwt.verify(token, env.auth.accessSecret, {
@@ -26,6 +28,13 @@ function verifyAuthenticationToken(req, res, next) {
 
     if (payload.type && payload.type !== "access") {
       throw new ApiError(401, "Invalid access token type.");
+    }
+
+    if (payload.jti && redisClient.isOpen) {
+      const isBlacklisted = await redisClient.get(`jwt_blacklist:${payload.jti}`);
+      if (isBlacklisted) {
+        throw new ApiError(401, "Access token has been revoked.");
+      }
     }
 
     req.auth = payload;

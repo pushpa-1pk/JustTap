@@ -25,7 +25,7 @@ const envVarsSchema = joi.object({
   TELEMETRY_THROTTLE_WINDOW_MS: joi.number().default(2000),
   GEOFENCE_NEARBY: joi.number().default(500),
   GEOFENCE_ARRIVED: joi.number().default(100),
-  TRACKING_STREAM_NAME: joi.string().default('mystream:tracking:events'),
+  TRACKING_STREAM_NAME: joi.string().default('justtap:booking:events:stream'),
   BOOKING_CONSUMER_GROUP: joi.string().default('group:tracking:booking-sync')
 }).unknown().required();
 

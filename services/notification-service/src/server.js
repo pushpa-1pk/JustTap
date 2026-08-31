@@ -14,8 +14,15 @@ async function launchSystemServerInstance() {
     await mongoose.connect(env.MONGO_URI);
     logger.info('Primary persistence database connected.');
 
-    await connectRabbitMQ(env);
-    await startEventConsumer(initializedContainer);
+    try {
+      await connectRabbitMQ(env);
+      await startEventConsumer(initializedContainer);
+    } catch (brokerError) {
+      if (env.NODE_ENV === 'production') {
+        throw brokerError;
+      }
+      logger.warn('RabbitMQ connection offline in dev mode. HTTP server booting in degraded state.', { error: brokerError.message });
+    }
 
     const runtimeExecutionPort = env.PORT || 4005;
     const processLifecycleServer = app.listen(runtimeExecutionPort, () => {

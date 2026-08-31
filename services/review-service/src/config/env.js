@@ -10,11 +10,12 @@ const envVarsSchema = Joi.object({
   MONGODB_URI: Joi.string().required().description('MongoDB connection string'),
   RABBITMQ_URI: Joi.string().uri().default('amqp://127.0.0.1:5672').description('RabbitMQ AMQP connection URI'),
   RABBITMQ_EXCHANGE: Joi.string().default('justtap.events'),
-  JWT_SECRET: Joi.string().min(16).default(Joi.ref('JWT_ACCESS_SECRET')).description('Cryptographic JWT sign token key'),
+  JWT_SECRET: Joi.string().min(16).required().description('Cryptographic JWT sign token key'),
   JWT_ACCESS_SECRET: Joi.string().min(16).optional(),
+  REDIS_URL: Joi.string().default('redis://127.0.0.1:6379'),
   BOOKING_SERVICE_URL: Joi.string().uri().default('http://127.0.0.1:3001'),
   PROFILE_SERVICE_URL: Joi.string().uri().default('http://127.0.0.1:4001'),
-  INTERNAL_API_KEY: Joi.string().min(8).default('justtap-internal-dev-key'),
+  INTERNAL_API_KEY: Joi.string().min(8).required(),
   INTERNAL_REQUEST_TIMEOUT_MS: Joi.number().integer().min(500).default(3000),
 }).unknown().required();
 
@@ -49,6 +50,9 @@ module.exports = Object.freeze({
   },
   jwt: {
     secret: envVars.JWT_SECRET
+  },
+  redis: {
+    url: envVars.REDIS_URL
   },
   security: {
     internalApiKey: envVars.INTERNAL_API_KEY

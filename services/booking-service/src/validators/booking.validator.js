@@ -61,9 +61,20 @@ const verifyHandshakeSchema = Joi.object({
   completionPhotos: Joi.array().items(Joi.string().uri()).optional()
 });
 
+const adminBookingSearchSchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(20),
+  status: Joi.string().valid(...Object.values(BOOKING_STATUS)).optional(),
+  customerId: objectIdPattern.optional(),
+  providerId: objectIdPattern.optional(),
+  serviceId: objectIdPattern.optional(),
+  bookingNumber: Joi.string().trim().optional()
+});
+
 module.exports = {
   bookingIdSchema,
   createBookingSchema,
   advanceStatusSchema,
-  verifyHandshakeSchema
+  verifyHandshakeSchema,
+  adminBookingSearchSchema
 };

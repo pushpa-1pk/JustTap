@@ -2,8 +2,9 @@ const jwt = require('jsonwebtoken');
 const config = require('../config/env');
 const { TRACKING_ROLES } = require('../constants/tracking.constants');
 const logger = require('../config/logger');
+const { redisClient } = require('../config/redis');
 
-const socketAuthMiddleware = (socket, next) => {
+const socketAuthMiddleware = async (socket, next) => {
   try {
     const token = socket.handshake.auth?.token || socket.handshake.headers?.authorization?.split(' ')[1];
 
@@ -12,12 +13,19 @@ const socketAuthMiddleware = (socket, next) => {
       return next(new Error('Authentication failed: Secure authorization credentials required.'));
     }
 
-    // Fixed Bug 2: Enforced rigorous constraints on the identity token verification context signature
     const decoded = jwt.verify(token, config.jwtAccessSecret, {
       issuer: config.jwtIssuer,
       audience: config.jwtAudience,
       algorithms: ['HS256']
     });
+
+    if (decoded.jti && redisClient.isOpen) {
+      const isBlacklisted = await redisClient.get(`jwt_blacklist:${decoded.jti}`);
+      if (isBlacklisted) {
+        logger.warn(`Handshake Revoked: Access token has been revoked for user ${decoded.userId}`);
+        return next(new Error('Authentication failed: Access token has been revoked.'));
+      }
+    }
 
     const absoluteRole = decoded.role?.toUpperCase();
     if (!Object.values(TRACKING_ROLES).includes(absoluteRole)) {
@@ -25,7 +33,6 @@ const socketAuthMiddleware = (socket, next) => {
       return next(new Error('Authorization failed: Forbidden account operational access tier.'));
     }
 
-    // Set immutable user identifier fields directly onto the connection socket descriptor state object
     socket.user = Object.freeze({
       userId: decoded.userId,
       role: absoluteRole

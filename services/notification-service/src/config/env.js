@@ -4,11 +4,12 @@ dotenv.config();
 
 const envSchema = Joi.object({
   PORT: Joi.number().default(4005),
-  NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
+  NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
   MONGO_URI: Joi.string().required(),
   REDIS_URI: Joi.string().required(),
-  RABBITMQ_URI: Joi.string().required(),
+  RABBITMQ_URI: Joi.string().default('amqp://127.0.0.1:5672'),
   JWT_SECRET: Joi.string().required(),
+  INTERNAL_API_KEY: Joi.string().required(),
   SMTP_HOST: Joi.string().allow(''),
   SMTP_PORT: Joi.number().default(587),
   SMTP_USER: Joi.string().allow(''),

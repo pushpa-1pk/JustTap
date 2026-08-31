@@ -57,8 +57,24 @@ const reviewReportSchema = Joi.object({
   })
 });
 
+const idParamSchema = Joi.object({
+  id: Joi.string().hex().length(24).required().messages({
+    'string.length': 'The review ID must be a 24-character hexadecimal string.',
+    'string.hex': 'The review ID must be a valid hexadecimal string.'
+  })
+});
+
+const providerIdParamSchema = Joi.object({
+  providerId: Joi.string().hex().length(24).required().messages({
+    'string.length': 'The provider ID must be a 24-character hexadecimal string.',
+    'string.hex': 'The provider ID must be a valid hexadecimal string.'
+  })
+});
+
 module.exports = {
   validateCreateReview: (payload) => reviewCreateSchema.validate(payload, { abortEarly: false, stripUnknown: true }),
   validateUpdateReview: (payload) => reviewUpdateSchema.validate(payload, { abortEarly: false, stripUnknown: true }),
-  validateReportReview: (payload) => reviewReportSchema.validate(payload, { abortEarly: false, stripUnknown: true })
+  validateReportReview: (payload) => reviewReportSchema.validate(payload, { abortEarly: false, stripUnknown: true }),
+  idParamSchema,
+  providerIdParamSchema
 };

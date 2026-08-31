@@ -1,0 +1,198 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: justtap-mongodb
+    ports:
+      - '27017:27017'
+    volumes:
+      - mongo_data:/data/db
+
+  redis:
+    image: redis:7-alpine
+    container_name: justtap-redis
+    ports:
+      - '6379:6379'
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: justtap-rabbitmq
+    ports:
+      - '5672:5672'
+      - '15672:15672'
+
+  auth-service:
+    build:
+      context: ./services/auth-service
+    container_name: justtap-auth-service
+    ports:
+      - '4000:4000'
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - MONGO_URI=mongodb://mongodb:27017/justtap_auth
+      - REDIS_URL=redis://redis:6379
+      - JWT_ACCESS_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - JWT_REFRESH_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+    depends_on:
+      - mongodb
+      - redis
+
+  profile-service:
+    build:
+      context: ./services/profile-service
+    container_name: justtap-profile-service
+    ports:
+      - '4001:4001'
+    environment:
+      - NODE_ENV=development
+      - PORT=4001
+      - MONGO_URI=mongodb://mongodb:27017/justtap_profile
+      - JWT_ACCESS_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+      - BANK_ENCRYPTION_SECRET=super_secret_bank_encryption_key_32c
+      - AUTH_SERVICE_URL=http://auth-service:4000
+    depends_on:
+      - mongodb
+      - auth-service
+
+  service-management-service:
+    build:
+      context: ./services/service-management-service
+    container_name: justtap-service-management
+    ports:
+      - '4002:4002'
+    environment:
+      - NODE_ENV=development
+      - PORT=4002
+      - MONGO_URI=mongodb://mongodb:27017/justtap_service_management
+      - JWT_ACCESS_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+    depends_on:
+      - mongodb
+
+  booking-service:
+    build:
+      context: ./services/booking-service
+    container_name: justtap-booking-service
+    ports:
+      - '3001:3001'
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+      - MONGO_URI=mongodb://mongodb:27017/justtap_booking
+      - REDIS_URL=redis://redis:6379
+      - JWT_ACCESS_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+      - AUTH_SERVICE_URL=http://auth-service:4000
+      - PROFILE_SERVICE_URL=http://profile-service:4001
+      - SERVICE_MANAGEMENT_SERVICE_URL=http://service-management-service:4002
+      - RABBITMQ_URI=amqp://rabbitmq:5672
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+
+  matching-service:
+    build:
+      context: ./services/matching-service
+    container_name: justtap-matching-service
+    ports:
+      - '5003:5003'
+    environment:
+      - NODE_ENV=development
+      - PORT=5003
+      - MONGO_URI=mongodb://mongodb:27017/justtap_matching
+      - REDIS_URL=redis://redis:6379
+      - JWT_ACCESS_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+      - AUTH_SERVICE_URL=http://auth-service:4000
+      - PROFILE_SERVICE_URL=http://profile-service:4001
+    depends_on:
+      - mongodb
+      - redis
+
+  tracking-service:
+    build:
+      context: ./services/tracking-service
+    container_name: justtap-tracking-service
+    ports:
+      - '5004:5004'
+    environment:
+      - NODE_ENV=development
+      - PORT=5004
+      - MONGO_URI=mongodb://mongodb:27017/justtap_tracking
+      - REDIS_URL=redis://redis:6379
+      - JWT_ACCESS_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+    depends_on:
+      - mongodb
+      - redis
+
+  payment-service:
+    build:
+      context: ./services/payment-service
+    container_name: justtap-payment-service
+    ports:
+      - '5005:5005'
+    environment:
+      - NODE_ENV=development
+      - PORT=5005
+      - MONGO_URI=mongodb://mongodb:27017/justtap_payment
+      - REDIS_URL=redis://redis:6379
+      - JWT_ACCESS_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - JWT_ISSUER=justtap-auth
+      - JWT_AUDIENCE=justtap-clients
+      - RAZORPAY_KEY_ID=rzp_test_dummy_key_id
+      - RAZORPAY_KEY_SECRET=dummy_razorpay_secret_key
+      - RAZORPAY_WEBHOOK_SECRET=dummy_webhook_secret
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+      - BANK_ENCRYPTION_SECRET=super_secret_bank_encryption_key_32c
+      - RABBITMQ_URI=amqp://rabbitmq:5672
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+
+  review-service:
+    build:
+      context: ./services/review-service
+    container_name: justtap-review-service
+    ports:
+      - '5006:5006'
+    environment:
+      - NODE_ENV=development
+      - PORT=5006
+      - MONGO_URI=mongodb://mongodb:27017/justtap_review
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+      - RABBITMQ_URI=amqp://rabbitmq:5672
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+    container_name: justtap-notification-service
+    ports:
+      - '4005:4005'
+    environment:
+      - NODE_ENV=development
+      - PORT=4005
+      - MONGO_URI=mongodb://mongodb:27017/justtap_notification
+      - REDIS_URL=redis://redis:6379
+      - JWT_ACCESS_SECRET=super_secret_jwt_key_min_32_chars_long_12345
+      - INTERNAL_API_KEY=super_secret_internal_key_min_16_chars
+      - RABBITMQ_URI=amqp://rabbitmq:5672
+    depends_on:
+      - mongodb
+      - redis
+      - rabbitmq
+
+volumes:
+  mongo_data:

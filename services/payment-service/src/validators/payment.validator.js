@@ -9,6 +9,12 @@ const paymentValidator = {
     bookingId: Joi.string().regex(objectIdRegex).required()
   }).options({ convert: false }), // P1: Strict type compliance enforcement
 
+  createIntent: Joi.object({
+    bookingId: Joi.string().regex(objectIdRegex).required(),
+    amount: Joi.number().positive().optional(),
+    currency: Joi.string().length(3).uppercase().optional()
+  }).options({ convert: false }),
+
   verifyPayment: Joi.object({
     gatewayOrderId: Joi.string().min(5).max(100).trim().required(),
     gatewayPaymentId: Joi.string().min(5).max(100).trim().required(),

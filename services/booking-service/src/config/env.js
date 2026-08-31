@@ -41,7 +41,8 @@ const requiredEnv = [
     "PORT",
     "MONGO_URI",
     "REDIS_URL",
-    "JWT_ACCESS_SECRET"
+    "JWT_ACCESS_SECRET",
+    "INTERNAL_API_KEY"
 ];
 
 requiredEnv.forEach((key) => {
@@ -68,7 +69,7 @@ module.exports = {
     authServiceUrl: process.env.AUTH_SERVICE_URL || 'http://127.0.0.1:4000',
     authUserLookupRequired: readBoolean('AUTH_USER_LOOKUP_REQUIRED', true),
     authUserLookupTimeoutMs: readNumber('AUTH_USER_LOOKUP_TIMEOUT_MS', 3000),
-    internalApiKey: process.env.INTERNAL_API_KEY || (process.env.NODE_ENV === 'production' ? '' : 'justtap-internal-dev-key'),
+    internalApiKey: process.env.INTERNAL_API_KEY,
 
     profileServiceUrl: process.env.PROFILE_SERVICE_URL || 'http://127.0.0.1:4001',
     profileLookupRequired: readBoolean('PROFILE_LOOKUP_REQUIRED', true),
@@ -80,7 +81,7 @@ module.exports = {
     rabbitmqUri: process.env.RABBITMQ_URI || 'amqp://127.0.0.1:5672',
     rabbitmqExchange: process.env.RABBITMQ_EXCHANGE || 'justtap.events',
 
-    corsOrigin: process.env.CORS_ORIGIN,
+    corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
 
     logLevel: process.env.LOG_LEVEL || "info",
 

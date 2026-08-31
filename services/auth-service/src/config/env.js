@@ -74,10 +74,7 @@ const env = {
   REFRESH_TOKEN_EXPIRES: getString("REFRESH_TOKEN_EXPIRES", "30d"),
   JSON_BODY_LIMIT: getString("JSON_BODY_LIMIT", "100kb"),
   ALLOWED_ORIGINS: getList("ALLOWED_ORIGINS"),
-  INTERNAL_API_KEY: getString(
-    "INTERNAL_API_KEY",
-    NODE_ENV === "production" ? "" : "justtap-internal-dev-key"
-  ),
+  INTERNAL_API_KEY: getRequiredString("INTERNAL_API_KEY"),
   SEND_OTP_RATE_LIMIT_WINDOW_MS: getNumber(
     "SEND_OTP_RATE_LIMIT_WINDOW_MS",
     15 * 60 * 1000

@@ -26,6 +26,10 @@ class BookingLifecycleWorker {
     } catch (error) {
       if (error.message.includes('BUSYGROUP')) {
         logger.debug(`Consumer group [${this.consumerGroup}] already exists. Reusing active structure.`);
+      } else if (config.env === 'development') {
+        logger.warn(`Redis Streams (XGROUP) unsupported by current Redis instance (${error.message}). Deactivating stream worker loop in dev.`);
+        this.isRunning = false;
+        return;
       } else {
         logger.error('Critical failure initializing Redis Stream infrastructure configuration states:', error);
         throw error;
@@ -72,48 +76,71 @@ class BookingLifecycleWorker {
    * Main routing engine execution gate for lifecycle event stream payloads
    */
   async processLifecycleEvent(messageId, eventPayload) {
-    const { eventType, bookingId, metadata } = eventPayload;
-    
     try {
-      const parsedMetadata = JSON.parse(metadata || '{}');
+      if (!eventPayload.data) {
+        logger.warn(`Received empty payload or missing 'data' field on message ${messageId}`);
+        await redisClient.xAck(this.streamName, this.consumerGroup, messageId);
+        return;
+      }
+
+      const parsedEvent = JSON.parse(eventPayload.data);
+      const eventType = parsedEvent.eventType;
+      const rawPayload = parsedEvent.payload;
+      const payload = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : (rawPayload || {});
+      const bookingId = payload.bookingId || payload.id;
+
+      if (!eventType || !bookingId) {
+        logger.warn(`Parsed event stream payload is missing eventType or bookingId: messageId=${messageId}`);
+        await redisClient.xAck(this.streamName, this.consumerGroup, messageId);
+        return;
+      }
+
       logger.info(`Background worker routing operational tracking events: [${eventType}] for booking ${bookingId}`);
 
       switch (eventType) {
-        
-        // Target: Cache static destination coordinates dynamically as soon as a booking shifts to active
-        case STREAM_EVENTS.LIFECYCLE_ACCEPTED:
-          if (parsedMetadata.latitude && parsedMetadata.longitude) {
+        case 'BOOKING_ACCEPTED':
+          // Pre-warm tracking cache with customer coordinates
+          if (payload.customerAddressSnapshot?.location?.coordinates) {
+            const [longitude, latitude] = payload.customerAddressSnapshot.location.coordinates;
             await cacheService.cacheBookingSnapshot(bookingId, {
-              latitude: parsedMetadata.latitude,
-              longitude: parsedMetadata.longitude,
-              providerId: parsedMetadata.providerId
+              latitude,
+              longitude,
+              providerId: payload.providerId || ''
             });
             logger.info(`Successfully completed tracking cache pre-warming operations for booking: ${bookingId}`);
+          } else {
+            logger.warn(`BOOKING_ACCEPTED payload missing customer location coordinates: bookingId=${bookingId}`);
           }
           break;
 
-        // Fixed Bug 2: Clear geofencing locks and cache files immediately upon cancellation, completion, or reassignment signals
-        case STREAM_EVENTS.LIFECYCLE_CLEANUP:
+        case 'BOOKING_COMPLETED':
+          // 1. Fetch raw trail from Redis cache list
+          const cacheListKey = `tracking:booking:${bookingId}:raw-trail`;
+          const stringifiedPoints = await redisClient.lRange(cacheListKey, 0, -1);
+          
+          if (stringifiedPoints.length > 0) {
+            const arrayPoints = stringifiedPoints.map(p => JSON.parse(p));
+            // 2. Persist compressed path history to MongoDB
+            await pathHistoryRepository.persistCompressedTrail(
+              bookingId,
+              payload.providerId || '',
+              arrayPoints,
+              payload.totalDistanceMeters || 0
+            );
+            logger.info(`Successfully persisted compressed path history for booking: ${bookingId}`);
+          }
+
+          // 3. Clean up cache resources
           await cacheService.clearBookingResources(bookingId);
           logger.info(`Successfully executed clean extraction teardown of transient resources for booking: ${bookingId}`);
           break;
-        
-        case 'booking:lifecycle:completed':
-            // 1. Fetch the raw, uncompressed trace records stored in the memory-hot Redis cache list
-            const cacheListKey = `tracking:booking:${bookingId}:raw-trail`;
-            const stringifiedPoints = await redisClient.lRange(cacheListKey, 0, -1);
-            
-            if (stringifiedPoints.length > 0) {
-                const arrayPoints = stringifiedPoints.map(p => JSON.parse(p));
-                
-                // 2. Offload the compression and MongoDB persistence work out-of-line to a background thread pass
-                await pathHistoryRepository.persistCompressedTrail(
-                bookingId,
-                parsedMetadata.providerId,
-                arrayPoints,
-                parsedMetadata.totalDistanceMeters || 0
-                );
-            }
+
+        case 'BOOKING_CANCELLED':
+        case 'BOOKING_ALLOCATION_FAILED':
+        case 'BOOKING_FAILED':
+          await cacheService.clearBookingResources(bookingId);
+          logger.info(`Successfully executed clean extraction teardown of transient resources for booking: ${bookingId}`);
+          break;
 
         default:
           logger.debug(`Ignored generic event signature match index footprint: [${eventType}]`);
@@ -125,9 +152,8 @@ class BookingLifecycleWorker {
 
     } catch (error) {
       logger.error(`Failed to process log entry footprint safely on message item reference id [${messageId}]:`, {
-        bookingId, eventType, error: error.message
+        error: error.message
       });
-      // In production, un-acknowledged messages bubble up to inspection logs or retry retry patterns automatically
     }
   }
 

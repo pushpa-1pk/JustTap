@@ -17,12 +17,15 @@ const runBootstrapSequence = async () => {
     logger.info('Database persistence engine connection successfully connected.');
 
     // 2. Connect Message Broker Infrastructure & Topology Maps
-    await rabbitmqConfig.connect();
+    try {
+      await rabbitmqConfig.connect();
+      await bookingConsumer.startListening();
+    } catch (mqError) {
+      if (config.env === 'production') throw mqError;
+      logger.warn(`RabbitMQ connection offline in dev environment (${mqError.message}). Express HTTP engine booting in degraded mode.`);
+    }
 
-    // 3. Instantiate and Trigger Background Event Queue Ingestion Listeners
-    await bookingConsumer.startListening();
-
-    // 4. Fire up the Express HTTP Listening Port Engine
+    // 3. Fire up the Express HTTP Listening Port Engine
     serverInstance = app.listen(config.port, () => {
       logger.info(`Review & Rating Engine processing actively on network allocation socket port: [${config.port}]`);
     });

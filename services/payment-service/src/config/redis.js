@@ -6,6 +6,7 @@ let isRedisConnected = false;
 
 const redisClient = createClient({
   url: env.redis.url,
+  RESP: 2,
   socket: {
     reconnectStrategy: (retries) => {
       // Prevents the thundering herd problem using explicit exponential backoff plus randomized jitter

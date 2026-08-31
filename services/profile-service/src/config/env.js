@@ -68,14 +68,13 @@ if (!ALLOWED_NODE_ENVS.has(NODE_ENV)) {
   );
 }
 
-const defaultEncryptionSecret = getString("JWT_ACCESS_SECRET", "unsafe-dev-secret");
 
 module.exports = {
   NODE_ENV,
   IS_PRODUCTION: NODE_ENV === "production",
   PORT: getNumber("PORT", 4001),
-  MONGO_URI: getRequiredString("MONGO_URI", "mongodb://127.0.0.1:27017/justtap_profile"),
-  JWT_ACCESS_SECRET: getRequiredString("JWT_ACCESS_SECRET", "unsafe-dev-secret"),
+  MONGO_URI: getRequiredString("MONGO_URI"),
+  JWT_ACCESS_SECRET: getRequiredString("JWT_ACCESS_SECRET"),
   JSON_BODY_LIMIT: getString("JSON_BODY_LIMIT", "100kb"),
   ALLOWED_ORIGINS: getList("ALLOWED_ORIGINS"),
   LOG_LEVEL: getString("LOG_LEVEL", "info"),
@@ -88,10 +87,7 @@ module.exports = {
   AUTH_SERVICE_URL: getString("AUTH_SERVICE_URL", "http://127.0.0.1:4000"),
   AUTH_USER_LOOKUP_REQUIRED: getBoolean("AUTH_USER_LOOKUP_REQUIRED", true),
   AUTH_USER_LOOKUP_TIMEOUT_MS: getNumber("AUTH_USER_LOOKUP_TIMEOUT_MS", 3000),
-  INTERNAL_API_KEY: getRequiredString(
-    "INTERNAL_API_KEY",
-    NODE_ENV === "production" ? "" : "justtap-internal-dev-key"
-  ),
+  INTERNAL_API_KEY: getRequiredString("INTERNAL_API_KEY"),
   PUBLIC_BASE_URL: getString("PUBLIC_BASE_URL", "http://127.0.0.1:4001"),
   STORAGE_DRIVER: getString("STORAGE_DRIVER", "local").toLowerCase(),
   UPLOADS_DIR_NAME: getString("UPLOADS_DIR_NAME", "uploads"),
@@ -102,8 +98,5 @@ module.exports = {
   ALLOW_REMOTE_FILE_URL_UPLOADS: getBoolean("ALLOW_REMOTE_FILE_URL_UPLOADS", false),
   PROFILE_IMAGE_MAX_FILE_SIZE_MB: getNumber("PROFILE_IMAGE_MAX_FILE_SIZE_MB", 5),
   DOCUMENT_MAX_FILE_SIZE_MB: getNumber("DOCUMENT_MAX_FILE_SIZE_MB", 10),
-  BANK_ENCRYPTION_SECRET: getRequiredString(
-    "BANK_ENCRYPTION_SECRET",
-    defaultEncryptionSecret
-  ),
+  BANK_ENCRYPTION_SECRET: getRequiredString("BANK_ENCRYPTION_SECRET"),
 };

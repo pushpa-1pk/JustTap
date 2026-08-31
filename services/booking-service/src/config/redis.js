@@ -4,6 +4,7 @@ const logger = require("./logger");
 
 const redisClient = createClient({
     url: env.redisUrl,
+    RESP: 2,
     socket: {
         connectTimeout: env.redisConnectTimeoutMs
     }

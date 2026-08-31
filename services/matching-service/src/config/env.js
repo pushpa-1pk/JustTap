@@ -62,13 +62,10 @@ module.exports = {
   IS_PRODUCTION: isProduction,
   PORT: getNumber("PORT", 5003),
   SERVICE_NAME: getString("SERVICE_NAME", "matching-service"),
-  MONGO_URI: getRequiredString(
-    "MONGO_URI",
-    "mongodb://127.0.0.1:27017/justtap_matching"
-  ),
-  REDIS_URL: getRequiredString("REDIS_URL", "redis://127.0.0.1:6379"),
+  MONGO_URI: getRequiredString("MONGO_URI"),
+  REDIS_URL: getRequiredString("REDIS_URL"),
   REDIS_DB: getNumber("REDIS_DB", 0),
-  JWT_ACCESS_SECRET: getRequiredString("JWT_ACCESS_SECRET", "unsafe-dev-secret"),
+  JWT_ACCESS_SECRET: getRequiredString("JWT_ACCESS_SECRET"),
   CORS_ORIGIN: getString("CORS_ORIGIN"),
   ALLOWED_ORIGINS: getList("ALLOWED_ORIGINS"),
   JSON_BODY_LIMIT: getString("JSON_BODY_LIMIT", "100kb"),
@@ -88,7 +85,7 @@ module.exports = {
   CLIENT_MAX_SOCKETS: getNumber("CLIENT_MAX_SOCKETS", 100),
   MAX_HTTP_KEEP_ALIVE_MSEC: getNumber("MAX_HTTP_KEEP_ALIVE_MSEC", 60000),
 
-  INTERNAL_API_KEY: getRequiredString("INTERNAL_API_KEY", internalApiKeyFallback),
+  INTERNAL_API_KEY: getRequiredString("INTERNAL_API_KEY"),
 
   MAX_SEARCH_RADIUS_KM: getNumber("MAX_SEARCH_RADIUS_KM", 25),
   DEFAULT_SEARCH_RADIUS_KM: getNumber("DEFAULT_SEARCH_RADIUS_KM", 10),

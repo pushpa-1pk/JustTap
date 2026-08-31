@@ -9,8 +9,8 @@ const ApiError = require("../utils/ApiError");
  */
 const createRateLimiter = (routeId, windowSeconds, maxRequests) => {
   return async (req, res, next) => {
-    const clientIpIdentifier = req.ip || req.headers["x-forwarded-for"] || "UNKNOWN_HOST";
-    const redisTrackingKey = `ratelimit:${routeId}:${clientIpIdentifier}`;
+    const userOrIpIdentifier = req.user?.id || req.user?.userId || req.auth?.userId || req.ip || "UNKNOWN_HOST";
+    const redisTrackingKey = `ratelimit:${routeId}:${userOrIpIdentifier}`;
 
     try {
       const activeHits = await redisClient.incr(redisTrackingKey);
@@ -33,5 +33,6 @@ const createRateLimiter = (routeId, windowSeconds, maxRequests) => {
 module.exports = {
   orderCreationLimiter: createRateLimiter("ORDER_INIT", 60, 20),   // 20 requests per minute ceiling
   checkoutVerifyLimiter: createRateLimiter("CHECKOUT_VER", 60, 10), // 10 checkouts per minute ceiling
-  withdrawalLimiter: createRateLimiter("WITHDRAW_EXEC", 60, 2)     // Max 2 cash-out attempts per minute
+  withdrawalLimiter: createRateLimiter("WITHDRAW_EXEC", 60, 2),     // Max 2 cash-out attempts per minute
+  refundLimiter: createRateLimiter("REFUND_EXEC", 60, 5)            // Max 5 refund attempts per minute
 };

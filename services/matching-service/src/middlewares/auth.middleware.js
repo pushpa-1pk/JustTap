@@ -10,6 +10,8 @@ const authClient = axios.create({
   timeout: env.AUTH_USER_LOOKUP_TIMEOUT_MS,
 });
 
+const { redisClient } = require("../config/redis");
+
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -22,6 +24,13 @@ const authenticate = async (req, res, next) => {
 
     if (decoded.type && decoded.type !== "access") {
       return next(new ApiError("Invalid access token type.", 401));
+    }
+
+    if (decoded.jti && redisClient.isOpen) {
+      const isBlacklisted = await redisClient.get(`jwt_blacklist:${decoded.jti}`);
+      if (isBlacklisted) {
+        return next(new ApiError("Access token has been revoked.", 401));
+      }
     }
 
     let authUser = null;

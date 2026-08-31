@@ -15,10 +15,16 @@ const getBearerToken = (authorizationHeader) => {
   return token;
 };
 
-const authMiddleware = (req, res, next) => {
+const tokenBlacklistService = require("../services/tokenBlacklist.service");
+
+const authMiddleware = async (req, res, next) => {
   try {
     const token = getBearerToken(req.get("authorization"));
     const payload = jwt.verify(token, config.jwt.secret);
+
+    if (payload.jti && (await tokenBlacklistService.isBlacklisted(payload.jti))) {
+      throw new ApiError(401, "Access token has been revoked.");
+    }
 
     req.user = {
       id: payload.userId || payload.id || payload.sub,

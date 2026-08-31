@@ -8,8 +8,12 @@ const validate = require("../middlewares/validate.middleware");
 const telemetry = require("../middlewares/telemetry.middleware");
 
 // Limiters
-const { orderCreationLimiter, checkoutVerifyLimiter, withdrawalLimiter } = require("../middlewares/rateLimit.middleware");
+const { orderCreationLimiter, checkoutVerifyLimiter, withdrawalLimiter, refundLimiter } = require("../middlewares/rateLimit.middleware");
 const { verifyAuthenticationToken, enforceUserRole } = require("../middlewares/auth.middleware");
+
+// Inject operational request telemetry processing loops across the active router context space
+
+
 
 // Inject operational request telemetry processing loops across the active router context space
 router.use(telemetry);
@@ -28,9 +32,17 @@ router.post(
 );
 
 router.post(
-  "/verify",
+  "/create-intent",
   verifyAuthenticationToken,
   enforceUserRole(["CUSTOMER"]),
+  orderCreationLimiter,
+  validate(paymentValidator.createIntent),
+  paymentController.initiateGatewayOrder
+);
+
+router.post(
+  "/verify",
+  verifyAuthenticationToken,
   checkoutVerifyLimiter,
   validate(paymentValidator.verifyPayment),
   paymentController.verifyAndCapture
@@ -40,6 +52,7 @@ router.post(
   "/refunds",
   verifyAuthenticationToken,
   enforceUserRole(["ADMIN"]),
+  refundLimiter,
   validate(paymentValidator.executeRefund),
   paymentController.triggerClawbackRefund
 );

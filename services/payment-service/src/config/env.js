@@ -21,7 +21,7 @@ const envVarsSchema = Joi.object({
   RABBITMQ_URI: Joi.string().uri().default("amqp://127.0.0.1:5672"),
   RABBITMQ_EXCHANGE: Joi.string().default("justtap.events"),
   INTERNAL_API_KEY: Joi.string().min(8).required(),
-  BANK_ENCRYPTION_SECRET: Joi.string().min(16).default(Joi.ref("JWT_ACCESS_SECRET")),
+  BANK_ENCRYPTION_SECRET: Joi.string().min(16).required(),
   PLATFORM_COMMISSION_PERCENT: Joi.number().min(0).max(100).default(10.0),
   GST_PERCENT_ON_COMMISSION: Joi.number().min(0).max(100).default(18.0),
   SETTLEMENT_HOLD_HOURS: Joi.number().integer().min(0).default(24),

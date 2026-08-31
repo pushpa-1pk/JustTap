@@ -26,4 +26,13 @@ router.post(
   searchController.searchProviders
 );
 
+router.post(
+  "/find-providers",
+  authenticate,
+  authorizeCustomer,
+  searchRateLimiter,
+  validate(providerSearchSchema),
+  searchController.searchProviders
+);
+
 module.exports = router;

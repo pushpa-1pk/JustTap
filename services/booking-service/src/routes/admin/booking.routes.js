@@ -5,7 +5,7 @@ const AdminCommandService = require('../../services/booking/commands/admin-comma
 const validate = require('../../middlewares/validate');
 const authenticate = require('../../middlewares/authenticate.middleware');
 const authorize = require('../../middlewares/authorize.middleware');
-const { bookingIdSchema } = require('../../validators/booking.validator');
+const { bookingIdSchema, adminBookingSearchSchema } = require('../../validators/booking.validator');
 const Joi = require('joi');
 
 const adminQuery = new AdminQueryService();
@@ -14,9 +14,10 @@ const adminCommand = new AdminCommandService();
 router.use(authenticate, authorize('ADMIN'));
 
 // Administrative Diagnostics Endpoints
-router.get('/search', async (req, res, next) => {
+router.get('/search', validate({ query: adminBookingSearchSchema }), async (req, res, next) => {
   try {
-    const result = await adminQuery.searchBookings(req.query, req.query.page, req.query.limit);
+    const { page, limit, ...filter } = req.validatedQuery;
+    const result = await adminQuery.searchBookings(filter, page, limit);
     res.status(200).json({ success: true, data: result });
   } catch (err) { next(err); }
 });

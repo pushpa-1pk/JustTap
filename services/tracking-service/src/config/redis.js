@@ -14,6 +14,7 @@ const maxRetryStrategy = (retries, cause) => {
 };
 const redisClient = createClient({
   url: config.redisUrl,
+  RESP: 2,
   socket: {
     reconnectStrategy: maxRetryStrategy,
     connectTimeout: 5000

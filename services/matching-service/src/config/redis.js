@@ -6,6 +6,7 @@ const buildClient = (name) => {
   const client = createClient({
     url: env.REDIS_URL,
     database: env.REDIS_DB,
+    RESP: 2,
     socket: {
       connectTimeout: env.CLIENT_TIMEOUT_MS,
       keepAlive: true,

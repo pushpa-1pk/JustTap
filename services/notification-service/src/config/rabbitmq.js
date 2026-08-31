@@ -21,6 +21,7 @@ async function connectRabbitMQ(envInstance) {
 
       await channel.assertExchange('justtap.events', 'topic', { durable: true });
       await channel.assertQueue('notification.ingress.events', { durable: true });
+      await channel.bindQueue('notification.ingress.events', 'justtap.events', '#');
 
       const activeChannels = ['push', 'email', 'sms', 'inapp'];
       for (const item of activeChannels) {
