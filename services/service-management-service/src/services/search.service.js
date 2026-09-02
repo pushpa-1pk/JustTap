@@ -86,58 +86,75 @@ class SearchService {
       accessToken
     );
 
-    let results = items.map((item) => {
-      const profile = profileMap.get(item.providerId);
-      const service = item.serviceId;
-      const coordinates = profile?.currentLocation?.coordinates;
-      let distanceKm = null;
+    let results = items
+      .map((item) => {
+        const profile = profileMap.get(item.providerId);
+        const service = item.serviceId;
+        const coordinates = profile?.currentLocation?.coordinates;
+        let distanceKm = null;
 
-      if (
-        query.latitude !== undefined &&
-        query.longitude !== undefined &&
-        Array.isArray(coordinates) &&
-        coordinates.length === 2
-      ) {
-        distanceKm = calculateDistanceKm(
-          query.latitude,
-          query.longitude,
-          coordinates[1],
-          coordinates[0]
-        );
-      }
+        if (
+          profile?.verificationStatus !== "approved" ||
+          profile?.isOnline !== true ||
+          item.isAvailable !== true
+        ) {
+          return null;
+        }
 
-      return {
-        providerId: item.providerId,
-        providerServiceId: item._id,
-        providerName: profile?.businessName || null,
-        price: item.price,
-        rating: profile?.rating ?? 0,
-        experience: item.experience,
-        experienceLabel: formatExperience(item.experience),
-        distanceKm: distanceKm !== null ? Number(distanceKm.toFixed(1)) : null,
-        distanceLabel:
-          distanceKm !== null ? `${distanceKm.toFixed(1)} KM` : null,
-        estimatedArrival: formatEta(distanceKm),
-        completedJobs: profile?.totalJobs ?? 0,
-        isOnline: profile?.isOnline ?? false,
-        isAvailable: item.isAvailable,
-        service: service
-          ? {
-              id: service._id,
-              name: service.name,
-              slug: service.slug,
-              estimatedDuration: service.estimatedDuration,
-              category: service.categoryId
-                ? {
-                    id: service.categoryId._id,
-                    name: service.categoryId.name,
-                    slug: service.categoryId.slug,
-                  }
-                : null,
-            }
-          : null,
-      };
-    });
+        if (
+          query.latitude !== undefined &&
+          query.longitude !== undefined
+        ) {
+          if (!Array.isArray(coordinates) || coordinates.length !== 2) {
+            return null;
+          }
+
+          distanceKm = calculateDistanceKm(
+            query.latitude,
+            query.longitude,
+            coordinates[1],
+            coordinates[0]
+          );
+
+          const workingRadiusKm = Number(profile?.workingRadius || 0);
+          if (workingRadiusKm > 0 && distanceKm > workingRadiusKm) {
+            return null;
+          }
+        }
+
+        return {
+          providerId: item.providerId,
+          providerServiceId: item._id,
+          providerName: profile?.businessName || null,
+          price: item.price,
+          rating: profile?.rating ?? 0,
+          experience: item.experience,
+          experienceLabel: formatExperience(item.experience),
+          distanceKm: distanceKm !== null ? Number(distanceKm.toFixed(1)) : null,
+          distanceLabel:
+            distanceKm !== null ? `${distanceKm.toFixed(1)} KM` : null,
+          estimatedArrival: formatEta(distanceKm),
+          completedJobs: profile?.totalJobs ?? 0,
+          isOnline: profile?.isOnline ?? false,
+          isAvailable: item.isAvailable,
+          service: service
+            ? {
+                id: service._id,
+                name: service.name,
+                slug: service.slug,
+                estimatedDuration: service.estimatedDuration,
+                category: service.categoryId
+                  ? {
+                      id: service.categoryId._id,
+                      name: service.categoryId.name,
+                      slug: service.categoryId.slug,
+                    }
+                  : null,
+              }
+            : null,
+        };
+      })
+      .filter(Boolean);
 
     if (query.minRating !== undefined) {
       results = results.filter((item) => item.rating >= query.minRating);
