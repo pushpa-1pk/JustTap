@@ -42,12 +42,18 @@ class CancellationService {
 
     // Save cancellation metadata across documents atomically
     await this.cancellationRepo.create(cancellationPayload, session);
-    
+
     const updatedBooking = await this.bookingRepo.updateStatus(booking._id, currentStatus, BOOKING_STATUS.CANCELLED, session);
 
-    // Apply decoupled processing hooks if payment requires refunding steps
+    // Always synchronize paymentStatus on cancellation to prevent the CANCELLED+PENDING ghost state.
+    // A CANCELLED+PENDING booking is indistinguishable from an overdue unpaid booking and blocks
+    // the customer from creating new bookings. Rules:
+    //   - Customer never paid (paymentStatus: PENDING) → set to FAILED (no money owed or taken)
+    //   - Customer paid and a refund is needed → set to PROCESSING (refund pipeline picks it up)
     if (financials.refundStatus === REFUND_STATUS.PROCESSING) {
       await this.bookingRepo.update(booking._id, { paymentStatus: PAYMENT_STATUS.PROCESSING }, session);
+    } else if (booking.paymentStatus === PAYMENT_STATUS.PENDING) {
+      await this.bookingRepo.update(booking._id, { paymentStatus: PAYMENT_STATUS.FAILED }, session);
     }
 
     await this.timelineService.logTransition({

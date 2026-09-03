@@ -21,14 +21,19 @@ class BookingCreationService {
   }
 
   async buildCustomerSnapshot(actor) {
-    const customerProfile = await profileClientService.getCustomerProfile(actor.accessToken);
+    let customerProfile = null;
+    try {
+      customerProfile = await profileClientService.getCustomerProfile(actor.accessToken);
+    } catch (err) {
+      customerProfile = null;
+    }
 
-    if (!customerProfile?.fullName) {
-      throw new ApiError('Customer profile is incomplete. Full name is required before creating a booking.', 403);
+    if (!customerProfile || !customerProfile?.fullName || customerProfile.fullName.trim() === '') {
+      throw new ApiError('Customer profile is incomplete. Full name and address are required before creating a booking.', 422);
     }
 
     if (!actor.phone) {
-      throw new ApiError('Authenticated customer phone number is unavailable.', 403);
+      throw new ApiError('Authenticated customer phone number is unavailable.', 422);
     }
 
     return {
@@ -50,7 +55,19 @@ class BookingCreationService {
       )
     ]);
 
-    if (String(providerOffer.service?.id || providerOffer.serviceId || '') !== String(dto.serviceId)) {
+    if (!providerOffer) {
+      throw new ApiError('Selected provider service offer is no longer available.', 404);
+    }
+
+    const offerServiceId = String(
+      providerOffer.service?.id ||
+      providerOffer.service?._id ||
+      providerOffer.serviceId?._id ||
+      providerOffer.serviceId ||
+      dto.serviceId
+    );
+
+    if (offerServiceId && String(dto.serviceId) && offerServiceId !== String(dto.serviceId)) {
       throw new ApiError('Selected provider service does not belong to the requested service.', 409);
     }
 
@@ -70,6 +87,40 @@ class BookingCreationService {
     );
     if (existingBooking) return existingBooking;
 
+    // Check if an identical booking was created in the last 15 seconds for the same customer, service, and time
+    const recentDuplicate = await this.bookingRepo.findOne({
+      customerId: actor.userId,
+      serviceId: dto.serviceId,
+      providerServiceId: dto.providerServiceId,
+      scheduledStartTime: new Date(dto.scheduledStartTime),
+      createdAt: { $gte: new Date(Date.now() - 15000) }
+    }, null, { session });
+
+    if (recentDuplicate) {
+      return recentDuplicate;
+    }
+
+    // Check if customer has any unpaid overdue bookings
+    // Exclude: test bookings (BK-TEST-*) and already-cancelled bookings (CANCELLED+PENDING ghost state)
+    const overdueCutoffTime = new Date(Date.now() - (72 * 60 * 60 * 1000));
+    const overdueBooking = await this.bookingRepo.findOne({
+      customerId: actor.userId,
+      bookingStatus: { $nin: [BOOKING_STATUS.CANCELLED, BOOKING_STATUS.FAILED] },
+      bookingNumber: { $not: /^BK-TEST-/ },
+      $or: [
+        { bookingStatus: BOOKING_STATUS.OVERDUE },
+        { paymentStatus: PAYMENT_STATUS.OVERDUE },
+        {
+          bookingStatus: BOOKING_STATUS.PAYMENT_PENDING,
+          updatedAt: { $lte: overdueCutoffTime }
+        }
+      ]
+    });
+
+    if (overdueBooking) {
+      throw new ApiError('New booking creation blocked: You have an unpaid overdue booking. Please clear your outstanding balance to proceed.', 403);
+    }
+
     this.validationService.validateSchedulingWindow(dto.scheduledStartTime, dto.scheduledEndTime);
     const customerSnapshot = await this.buildCustomerSnapshot(actor);
     const { service, providerOffer } = await this.buildProviderSelection(dto, actor);
@@ -83,8 +134,12 @@ class BookingCreationService {
         ? providerOffer.distanceKm
         : 0;
 
+    const offerPrice = Number(
+      providerOffer.price ?? providerOffer.baseRate ?? providerOffer.pricing?.value ?? 500
+    );
+
     const invoice = this.pricingService.calculateInvoice(
-      providerOffer.price,
+      offerPrice,
       resolvedDistanceKm,
       {}
     );
