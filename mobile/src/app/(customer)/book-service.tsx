@@ -5,11 +5,13 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useTheme } from '@/hooks/useTheme';
-import { useGetAddressesQuery } from '@/redux/api/profileApi';
+import { useGetCustomerProfile } from '@/hooks/useProfile';
 import { useGetServiceByIdQuery } from '@/redux/api/serviceApi';
 import { useCreateBookingMutation } from '@/redux/api/bookingApi';
 import * as Haptics from 'expo-haptics';
 import { getRequiredDeviceLocation } from '@/hooks/useDeviceLocation';
+import { useSubmitGuard } from '@/hooks/useSubmitGuard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Validation Schema
 const bookingSchema = z.object({
@@ -22,6 +24,8 @@ const bookingSchema = z.object({
 type FormData = z.infer<typeof bookingSchema>;
 
 export default function BookServiceScreen() {
+  const insets = useSafeAreaInsets();
+  const submissionLock = useRef(false);
   const { colors, typography, spacing } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -37,13 +41,96 @@ export default function BookServiceScreen() {
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<FormData | null>(null);
   const [confirmationKey, setConfirmationKey] = useState<string | null>(null);
-  const submissionLock = useRef(false);
+  
   // API Queries & Mutations
-  const { data: addressesRes, isLoading: isAddressesLoading } = useGetAddressesQuery();
+  const { data: customerProfileData, isLoading: isAddressesLoading } = useGetCustomerProfile();
   const serviceQuery = useGetServiceByIdQuery(params.serviceId ?? '', { skip: !params.serviceId });
   const [createBooking, { isLoading: isCreatingBooking }] = useCreateBookingMutation();
 
-  const addresses = addressesRes?.data || [];
+  const { handleSubmit: handleConfirmBookingGuarded, isSubmitting: isSubmittingBooking } = useSubmitGuard(
+    async (data: FormData, idempotencyKey: string) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      
+      const activeAddress = addresses.find(a => ((a as any)._id || (a as any).id) === selectedAddressId);
+      if (!activeAddress || addresses.length === 0) {
+        Alert.alert('Profile & Address Required', 'Please provide your name and primary service address before placing a booking.', [
+          {
+            text: 'Complete Profile',
+            onPress: () => router.push('/(customer)/complete-profile'),
+          },
+          { text: 'Cancel', style: 'cancel' }
+        ]);
+        return;
+      }
+
+      if (!idempotencyKey || !params.serviceId || !params.providerServiceId || !service || !service.isActive || !hasValidPrice || !serviceDurationMinutes) {
+        Alert.alert('Service unavailable', 'This service no longer has a valid provider offer. Please return to search and select a provider again.');
+        return;
+      }
+
+      const deviceLocation = await getRequiredDeviceLocation();
+      if (!deviceLocation) {
+        return;
+      }
+
+      try {
+        let start = new Date(Date.now() + 20 * 60 * 1000);
+        if (data.bookingType === 'SCHEDULED' && data.date && data.time) {
+          start = new Date(`${data.date}T${data.time}:00.000Z`);
+        }
+        if (Number.isNaN(start.getTime()) || start <= new Date()) {
+          Alert.alert('Invalid schedule', 'Choose a valid future date and time.');
+          return;
+        }
+        
+        const end = new Date(start.getTime() + serviceDurationMinutes * 60 * 1000);
+
+        const bookingPayload = {
+          idempotencyKey,
+          serviceId: params.serviceId,
+          providerServiceId: params.providerServiceId,
+          bookingType: data.bookingType,
+          scheduledStartTime: start.toISOString(),
+          scheduledEndTime: end.toISOString(),
+          customerAddressSnapshot: {
+            label: activeAddress.label,
+            addressLine1: activeAddress.addressLine1,
+            addressLine2: activeAddress.addressLine2,
+            city: activeAddress.city,
+            state: activeAddress.state,
+            pincode: activeAddress.pincode,
+            location: {
+              type: 'Point' as const,
+              coordinates: [deviceLocation.longitude, deviceLocation.latitude] as [number, number],
+            }
+          },
+          additionalNotes: data.additionalNotes || undefined
+        };
+
+        const response = await createBooking(bookingPayload).unwrap();
+        if (response.success && response.data) {
+          router.push({
+            pathname: '/(customer)/booking-success',
+            params: { bookingId: response.data._id || response.data.id }
+          });
+        }
+      } catch (err: any) {
+        console.error('Booking submission failed:', err);
+        const errorMsg = err?.data?.message || '';
+        if (errorMsg.toLowerCase().includes('profile is incomplete') || errorMsg.toLowerCase().includes('address are required')) {
+          Alert.alert('Profile Incomplete', 'Please enter your name and address to continue booking.', [
+            { text: 'Complete Profile', onPress: () => router.push('/(customer)/complete-profile') },
+            { text: 'Cancel', style: 'cancel' }
+          ]);
+        } else {
+          Alert.alert('Booking not confirmed', errorMsg || (err?.status ? 'Your booking was not created. Please try again.' : 'We could not confirm whether the request reached the server. Check My Bookings before retrying to avoid a duplicate booking.'));
+        }
+      }
+    },
+    { disabled: isCreatingBooking }
+  );
+
+  const addresses = customerProfileData?.addresses || [];
   const basePrice = Number(params.price);
   const hasValidPrice = Number.isFinite(basePrice) && basePrice > 0;
   const service = serviceQuery.data?.data;
@@ -65,7 +152,7 @@ export default function BookServiceScreen() {
   useEffect(() => {
     if (addresses.length > 0) {
       const primary = addresses.find(a => a.isPrimary) || addresses[0];
-      setSelectedAddressId(primary._id || primary.id || null);
+      setSelectedAddressId((primary as any)._id || (primary as any).id || null);
     }
   }, [addresses]);
 
@@ -74,9 +161,15 @@ export default function BookServiceScreen() {
     submissionLock.current = true;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     
-    const activeAddress = addresses.find(a => (a._id || a.id) === selectedAddressId);
-    if (!activeAddress) {
-      Alert.alert('Address required', 'Please select a saved service address before booking.');
+    const activeAddress = addresses.find(a => ((a as any)._id || (a as any).id) === selectedAddressId);
+    if (!activeAddress || addresses.length === 0) {
+      Alert.alert('Profile & Address Required', 'Please provide your name and primary service address before placing a booking.', [
+        {
+          text: 'Complete Profile',
+          onPress: () => router.push('/(customer)/complete-profile'),
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]);
       submissionLock.current = false;
       return;
     }
@@ -138,7 +231,15 @@ export default function BookServiceScreen() {
       }
     } catch (err: any) {
       console.error('Booking submission failed:', err);
-      Alert.alert('Booking not confirmed', err?.data?.message || (err?.status ? 'Your booking was not created. Please try again.' : 'We could not confirm whether the request reached the server. Check My Bookings before retrying to avoid a duplicate booking.'));
+      const errorMsg = err?.data?.message || '';
+      if (errorMsg.toLowerCase().includes('profile is incomplete') || errorMsg.toLowerCase().includes('address are required')) {
+        Alert.alert('Profile Incomplete', 'Please enter your name and address to continue booking.', [
+          { text: 'Complete Profile', onPress: () => router.push('/(customer)/complete-profile') },
+          { text: 'Cancel', style: 'cancel' }
+        ]);
+      } else {
+        Alert.alert('Booking not confirmed', errorMsg || (err?.status ? 'Your booking was not created. Please try again.' : 'We could not confirm whether the request reached the server. Check My Bookings before retrying to avoid a duplicate booking.'));
+      }
     } finally {
       submissionLock.current = false;
     }
@@ -155,14 +256,20 @@ export default function BookServiceScreen() {
     setConfirmationKey((currentKey) => currentKey || `booking-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`);
   };
 
-  const selectedAddress = addresses.find((address) => (address._id || address.id) === selectedAddressId);
+  const selectedAddress = addresses.find((address) => ((address as any)._id || (address as any).id) === selectedAddressId);
 
   return (
     <KeyboardAvoidingView 
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContainer,
+          { paddingBottom: Math.max(56, insets.bottom + 40) }
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={[styles.container, { padding: spacing.lg }]}>
           
           {/* Header Summary */}
@@ -183,14 +290,17 @@ export default function BookServiceScreen() {
           ) : addresses.length === 0 ? (
             <Pressable 
               style={[styles.addressCard, { borderColor: colors.border, borderStyle: 'dashed' }]}
-              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/(customer)/addresses');
+              }}
             >
-              <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>No saved addresses. Add one in Profile.</Text>
+              <Text style={[typography.bodyMedium, { color: colors.textSecondary }]}>No saved addresses. Tap here to add one.</Text>
             </Pressable>
           ) : (
             <View style={styles.addressList}>
               {addresses.map((addr) => {
-                const id = addr._id || addr.id;
+                const id = (addr as any)._id || (addr as any).id;
                 const isSelected = selectedAddressId === id;
                 return (
                   <Pressable
@@ -221,7 +331,6 @@ export default function BookServiceScreen() {
               })}
             </View>
           )}
-
           {/* 2. Booking Type Toggle */}
           <Text style={[styles.sectionTitle, typography.h3, { color: colors.text, marginTop: spacing.lg }]}>
             Choose Schedule
@@ -357,7 +466,24 @@ export default function BookServiceScreen() {
               <Text style={[typography.caption, { color: colors.textSecondary, marginTop: spacing.sm }]}>The final total and provider availability are verified by the server.</Text>
               <View style={styles.confirmActions}>
                 <Pressable onPress={() => { setConfirmation(null); setConfirmationKey(null); }} style={[styles.editBtn, { borderColor: colors.border }]}><Text style={{ color: colors.text }}>Edit</Text></Pressable>
-                <Pressable onPress={() => { const data = confirmation; const key = confirmationKey; setConfirmation(null); void createBookingRequest(data, key); }} disabled={isCreatingBooking} style={[styles.confirmBtn, { backgroundColor: colors.primary }]}>{isCreatingBooking ? <ActivityIndicator color={colors.onPrimary} /> : <Text style={{ color: colors.onPrimary, fontWeight: '700' }}>Confirm booking</Text>}</Pressable>
+                <Pressable
+                  onPress={() => {
+                    const data = confirmation;
+                    const key = confirmationKey;
+                    if (data && key) {
+                      setConfirmation(null);
+                      void handleConfirmBookingGuarded(data, key);
+                    }
+                  }}
+                  disabled={isCreatingBooking || isSubmittingBooking}
+                  style={[styles.confirmBtn, { backgroundColor: colors.primary }, (isCreatingBooking || isSubmittingBooking) && { opacity: 0.7 }]}
+                >
+                  {(isCreatingBooking || isSubmittingBooking) ? (
+                    <ActivityIndicator color={colors.onPrimary} />
+                  ) : (
+                    <Text style={{ color: colors.onPrimary, fontWeight: '700' }}>Confirm booking</Text>
+                  )}
+                </Pressable>
               </View>
             </View>
           )}

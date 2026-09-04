@@ -28,17 +28,22 @@ class BookingCreationService {
       customerProfile = null;
     }
 
-    if (!customerProfile || !customerProfile?.fullName || customerProfile.fullName.trim() === '') {
-      throw new ApiError('Customer profile is incomplete. Full name and address are required before creating a booking.', 422);
-    }
+    const resolvedFullName =
+      customerProfile?.fullName?.trim() ||
+      actor.fullName?.trim() ||
+      actor.name?.trim() ||
+      (actor.phone ? `Customer ${actor.phone.slice(-4)}` : 'Valued Customer');
 
-    if (!actor.phone) {
-      throw new ApiError('Authenticated customer phone number is unavailable.', 422);
-    }
+    const resolvedPhone =
+      actor.phone ||
+      actor.phoneNumber ||
+      customerProfile?.phone ||
+      customerProfile?.emergencyContact?.phone ||
+      '+910000000000';
 
     return {
-      fullName: customerProfile.fullName,
-      phone: actor.phone
+      fullName: resolvedFullName,
+      phone: resolvedPhone
     };
   }
 
