@@ -39,6 +39,34 @@ class InternalService {
     };
   }
 
+  async getProvidersBatch(userIds, options = {}) {
+    let profiles = [];
+    if (options.allApproved) {
+      profiles = await providerProfileRepository.findAll({ verificationStatus: { $ne: "rejected" } });
+    } else {
+      profiles = await providerProfileRepository.findByUserIds(userIds);
+    }
+
+    return profiles.map((profile) => ({
+      providerId: profile.userId || (profile._id ? profile._id.toString() : null),
+      userId: profile.userId,
+      profileId: profile._id ? profile._id.toString() : profile.userId,
+      businessName: profile.businessName,
+      experience: profile.experience,
+      workingRadius: profile.workingRadius,
+      currentLocation: profile.currentLocation,
+      verificationStatus: profile.verificationStatus,
+      rating: profile.rating ?? 0,
+      totalJobs: profile.totalJobs ?? 0,
+      isOnline: profile.isOnline ?? false,
+      isAvailable: profile.isAvailable ?? true,
+      subServices: profile.subServices || [],
+      primaryCategory: profile.primaryCategory || "",
+      baseRate: profile.baseRate || 499,
+      profileImage: profile.profileImage || "",
+    }));
+  }
+
   async getProvidersServiceAreaStatus(providerIds, customerLocation) {
     const profiles = await providerProfileRepository.findByUserIds(providerIds);
 
@@ -66,12 +94,16 @@ class InternalService {
     const profiles = await providerProfileRepository.findByUserIds(providerIds);
 
     return profiles.map((profile) => ({
-      providerId: String(profile.userId),
-      fullName: profile.businessName,
-      businessName: profile.businessName,
+      providerId: String(profile.userId || profile._id),
+      userId: String(profile.userId || profile._id),
+      profileId: profile._id ? String(profile._id) : String(profile.userId),
+      fullName: profile.fullName || profile.businessName || "JustTap Provider",
+      businessName: profile.businessName || profile.fullName || null,
       profilePhotoUrl: profile.profileImage || null,
-      isVerified: profile.verificationStatus === "approved",
+      profileImage: profile.profileImage || null,
+      isVerified: profile.verificationStatus !== "rejected",
       languages: ["English"],
+      isOnline: Boolean(profile.isOnline),
       nextAvailableTime: profile.isOnline ? "Available Now" : "Offline",
       metrics: {
         rating: Number(profile.rating || 0),
