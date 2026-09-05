@@ -126,7 +126,7 @@ class BookingCreationService {
       throw new ApiError('New booking creation blocked: You have an unpaid overdue booking. Please clear your outstanding balance to proceed.', 403);
     }
 
-    this.validationService.validateSchedulingWindow(dto.scheduledStartTime, dto.scheduledEndTime);
+    this.validationService.validateSchedulingWindow(dto.scheduledStartTime, dto.scheduledEndTime, dto.bookingType);
     const customerSnapshot = await this.buildCustomerSnapshot(actor);
     const { service, providerOffer } = await this.buildProviderSelection(dto, actor);
 

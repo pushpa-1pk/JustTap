@@ -5,17 +5,26 @@ class BookingValidationService {
   /**
    * Enforces future booking scheduling constraints
    */
-  validateSchedulingWindow(startTime, endTime) {
+  validateSchedulingWindow(startTime, endTime, bookingType = 'INSTANT') {
     const now = new Date();
-    const minLeadTimeBufferMs = 15 * 60 * 1000; 
+    // Instant bookings are created in real time with immediate dispatch
+    const minLeadTimeBufferMs = bookingType === 'INSTANT' ? -60000 : 15 * 60 * 1000; 
 
     if (new Date(startTime).getTime() < now.getTime() + minLeadTimeBufferMs) {
-      throw new ApiError('Scheduling Exception: Bookings must be reserved at least 15 minutes in advance.', 400);
+      throw new ApiError('Scheduling Exception: Bookings must be scheduled in advance.', 400);
     }
 
-    const startHour = new Date(startTime).getHours();
-    if (startHour < 6 || startHour > 23) {
-      throw new ApiError('Scheduling Exception: Bookings can only be scheduled within standard operation hours (06:00 AM - 11:00 PM).', 422);
+    // Convert to Indian Standard Time (IST / Asia/Kolkata, UTC+5:30)
+    // to prevent UTC cloud servers (e.g. Render) from rejecting morning/daytime bookings
+    const istTimeStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: 'numeric',
+      hour12: false
+    }).format(new Date(startTime));
+
+    const startHour = parseInt(istTimeStr, 10);
+    if (startHour < 6 || startHour >= 23) {
+      throw new ApiError('Scheduling Exception: Bookings can only be scheduled within standard operation hours (06:00 AM - 11:00 PM IST).', 422);
     }
   }
 
