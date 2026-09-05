@@ -11,20 +11,26 @@ const providerQueryRoutes = require('./routes/provider/booking.routes');
 const adminBookingRoutes = require('./routes/admin/booking.routes');
 const cancellationRoutes = require('./routes/cancellation.routes');
 const rescheduleRoutes = require('./routes/reschedule.routes');
+const estimateRoutes = require('./routes/estimate.routes');
+const disputeRoutes = require('./routes/dispute.routes');
 const internalRoutes = require('./routes/internal.routes');
+const chatRoutes = require('./routes/chat.routes');
 
 const app = express();
 
+const corsConfig = require('./config/cors');
+
 // Security Ingress Layer
 app.use(helmet());
-app.use(cors({ origin: env.corsOrigin }));
+app.use(cors(corsConfig));
 app.use(express.json({ limit: '10kb' })); // Mitigates large-payload JSON denial-of-service attempts
 
 // Microservice Health Verification Gateway
-app.get('/health', (req, res) => {
+app.get(['/', '/health'], (req, res) => {
   res.status(200).json({
     success: true,
     service: env.serviceName,
+    status: 'ONLINE',
     timestamp: new Date().toISOString()
   });
 });
@@ -35,6 +41,9 @@ app.use('/api/v1/bookings/provider', providerCommandRoutes);
 app.use('/api/v1/bookings/provider', providerQueryRoutes);
 app.use('/api/v1/bookings', cancellationRoutes);
 app.use('/api/v1/bookings', rescheduleRoutes);
+app.use('/api/v1/bookings', estimateRoutes);
+app.use('/api/v1/bookings', disputeRoutes);
+app.use('/api/v1', chatRoutes);
 app.use('/api/v1/admin/bookings', adminBookingRoutes);
 app.use('/api/v1/internal/bookings', internalRoutes);
 
