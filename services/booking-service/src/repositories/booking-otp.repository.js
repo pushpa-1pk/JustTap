@@ -12,7 +12,7 @@ class BookingOTPRepository extends BaseRepository {
    * @param {mongoose.ClientSession} [session=null] - Transaction workspace boundary session handle [cite: 183]
    */
   async upsertOTP(otpData, session = null) {
-    const options = { upsert: true, new: true, setDefaultsOnInsert: true };
+    const options = { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true };
     if (session) options.session = session;
 
     return this.model.findOneAndUpdate(
@@ -31,7 +31,7 @@ class BookingOTPRepository extends BaseRepository {
     return this.model.findOneAndUpdate(
       { bookingId, verifiedAt: null },
       { $inc: { attemptCount: 1 } },
-      { new: true, lean: false }
+      { returnDocument: 'after', lean: false }
     );
   }
 
@@ -41,7 +41,7 @@ class BookingOTPRepository extends BaseRepository {
    * @param {mongoose.ClientSession} [session=null] - Optional transaction scope context pointer [cite: 183]
    */
   async markAsVerified(bookingId, session = null) {
-    const options = { new: true };
+    const options = { returnDocument: 'after' };
     if (session) options.session = session;
 
     return this.model.findOneAndUpdate(

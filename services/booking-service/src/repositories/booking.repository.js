@@ -11,13 +11,13 @@ class BookingRepository extends BaseRepository {
    * Concurrency Safe Atomic State Mutator. Verifies the expected current state 
    * to eliminate race conditions when providers accept bookings.
    * @param {string} bookingId - Target database document primary key
-   * @param {string} currentStatus - Expected source booking status state constant [cite: 194]
-   * @param {string} nextStatus - Destination booking status state constant target [cite: 194]
-   * @param {Object} [session=null] - Optional database operational session reference [cite: 183]
-   * @returns {Promise<mongoose.Document|null>} Mutated state document or null if collision occurs [cite: 204]
+   * @param {string} currentStatus - Expected source booking status state constant
+   * @param {string} nextStatus - Destination booking status state constant target
+   * @param {Object} [session=null] - Optional database operational session reference
+   * @returns {Promise<mongoose.Document|null>} Mutated state document or null if collision occurs
    */
   async updateStatus(bookingId, currentStatus, nextStatus, session = null) {
-    const options = { new: true, runValidators: true };
+    const options = { returnDocument: 'after', runValidators: true };
     if (session) options.session = session;
 
     // Direct temporal field sync configuration map mirroring core entity structure metrics
@@ -46,13 +46,52 @@ class BookingRepository extends BaseRepository {
   }
 
   /**
+   * Atomic combined status transition + additional field update in a single DB round-trip.
+   * Eliminates the non-atomic two-step pattern: updateStatus() then update().
+   * Uses the same optimistic lock as updateStatus() — requires currentStatus to match.
+   *
+   * @param {string} bookingId - Target booking ID
+   * @param {string} currentStatus - Expected current bookingStatus (optimistic lock)
+   * @param {string} nextStatus - New bookingStatus to set
+   * @param {Object} extraFields - Additional flat fields to $set alongside the status transition
+   * @param {mongoose.ClientSession} [session=null]
+   */
+  async updateStatusWithData(bookingId, currentStatus, nextStatus, extraFields = {}, session = null) {
+    const options = { returnDocument: 'after', runValidators: true };
+    if (session) options.session = session;
+
+    const timestampFieldMap = {
+      [BOOKING_STATUS.PROVIDER_ACCEPTED]: 'acceptedAt',
+      [BOOKING_STATUS.ARRIVED]: 'arrivedAt',
+      [BOOKING_STATUS.SERVICE_STARTED]: 'serviceStartedAt',
+      [BOOKING_STATUS.SERVICE_COMPLETED]: 'serviceCompletedAt',
+      [BOOKING_STATUS.COMPLETED]: 'completedAt'
+    };
+
+    const updatePayload = { bookingStatus: nextStatus, ...extraFields };
+    if (timestampFieldMap[nextStatus]) {
+      updatePayload[timestampFieldMap[nextStatus]] = new Date();
+    }
+
+    return this.model.findOneAndUpdate(
+      {
+        _id: bookingId,
+        bookingStatus: currentStatus,
+        deletedAt: null
+      },
+      { $set: updatePayload },
+      options
+    );
+  }
+
+  /**
    * Retargets an active booking request to the next provider in the matching cascade queue
    * @param {string} bookingId - Target database booking key identifier
    * @param {Object} nextProviderSnapshot - Next provider's profile data snapshot
    * @param {mongoose.ClientSession} [session=null] - Active database session reference
    */
   async cycleNextProviderFallback(bookingId, nextProviderSnapshot, session = null) {
-    const options = { new: true, runValidators: true };
+    const options = { returnDocument: 'after', runValidators: true };
     if (session) options.session = session;
 
     return this.model.findOneAndUpdate(
@@ -108,10 +147,10 @@ class BookingRepository extends BaseRepository {
   }
 
   /**
-   * Identifies unassigned local requests using GeoJSON spherical calculations [cite: 704]
-   * @param {number} longitude - Geographic coordinate positioning parameter [cite: 681]
-   * @param {number} latitude - Geographic coordinate positioning parameter [cite: 681]
-   * @param {number} maxDistanceMeters - Maximum calculation distance threshold [cite: 704]
+   * Identifies unassigned local requests using GeoJSON spherical calculations
+   * @param {number} longitude - Geographic coordinate positioning parameter
+   * @param {number} latitude - Geographic coordinate positioning parameter
+   * @param {number} maxDistanceMeters - Maximum calculation distance threshold
    * @param {Object} [filter={}] - Additional categorical lookup rules
    */
   async findNearbyGeospatialBookings(longitude, latitude, maxDistanceMeters, filter = {}) {
@@ -129,7 +168,7 @@ class BookingRepository extends BaseRepository {
   }
 
   async updateSchedule(bookingId, startTime, endTime, session = null) {
-    const options = { new: true, runValidators: true };
+    const options = { returnDocument: 'after', runValidators: true };
     if (session) options.session = session;
 
     return this.model.findOneAndUpdate(
@@ -152,7 +191,7 @@ class BookingRepository extends BaseRepository {
     expectedStatuses = [BOOKING_STATUS.REQUESTED, BOOKING_STATUS.SEARCHING_PROVIDER],
     session = null
   ) {
-    const options = { new: true, runValidators: true };
+    const options = { returnDocument: 'after', runValidators: true };
     if (session) options.session = session;
 
     return this.model.findOneAndUpdate(

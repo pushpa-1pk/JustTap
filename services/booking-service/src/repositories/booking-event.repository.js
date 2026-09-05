@@ -39,7 +39,7 @@ class BookingEventRepository extends BaseRepository {
         published: false 
       },
       { $inc: { retryCount: 1 } },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 
@@ -56,7 +56,7 @@ class BookingEventRepository extends BaseRepository {
           publishedAt: new Date() 
         } 
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
   }
 }

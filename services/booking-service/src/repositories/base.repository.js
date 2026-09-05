@@ -79,7 +79,7 @@ class BaseRepository {
    * @returns {Promise<mongoose.Document|null>} Post-mutation Mongoose Document state [cite: 204]
    */
   async update(id, updateData, session = null) {
-    const options = { new: true, runValidators: true };
+    const options = { returnDocument: 'after', runValidators: true };
     if (session) options.session = session;
 
     return this.model.findOneAndUpdate(
@@ -166,7 +166,7 @@ class BaseRepository {
    * @returns {Promise<mongoose.Document|null>} Formatted Mongoose Document verification context [cite: 204]
    */
   async softDelete(id, deletedBy, session = null) {
-    const options = { new: true };
+    const options = { returnDocument: 'after' };
     if (session) options.session = session;
 
     return this.model.findOneAndUpdate(

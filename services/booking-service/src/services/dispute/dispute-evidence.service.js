@@ -20,7 +20,7 @@ class DisputeEvidenceService {
       createdAt: new Date()
     }));
 
-    const options = session ? { session, new: true } : { new: true };
+    const options = session ? { session, returnDocument: 'after' } : { returnDocument: 'after' };
     const updatedDispute = await this.disputeRepo.model.findByIdAndUpdate(
       disputeId,
       { $push: { evidence: { $each: formattedEvidence } } },

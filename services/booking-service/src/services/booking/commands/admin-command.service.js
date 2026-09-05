@@ -37,7 +37,7 @@ class AdminCommandService {
             acceptedAt: new Date()
           }
         },
-        { new: true, session }
+        { returnDocument: 'after', session }
       );
 
       await this.timelineService.logTransition({

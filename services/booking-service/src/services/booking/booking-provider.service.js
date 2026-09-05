@@ -63,6 +63,8 @@ class BookingProviderService {
       throw new ApiError('Operational Error: Booking request is no longer open for assignment updates.', 400);
     }
 
+    const providerName = booking.providerSnapshot?.businessName || 'The requested provider';
+
     if (booking.bookingType === 'INSTANT' && fallbackCandidateProvider) {
       const updatedBooking = await this.bookingRepo.cycleNextProviderFallback(bookingId, fallbackCandidateProvider, session);
 
@@ -83,49 +85,45 @@ class BookingProviderService {
       );
 
       return updatedBooking;
-    } else if (booking.bookingType === 'INSTANT') {
-      const updatedBooking = await this.bookingRepo.updateStatus(
-        bookingId,
-        BOOKING_STATUS.PENDING_PROVIDER_RESPONSE,
-        BOOKING_STATUS.SEARCHING_PROVIDER,
-        session
+    } else {
+      // Mark as PROVIDER_TIMEOUT for customer-driven rebook & persist timedOutProviderIds
+      const options = { returnDocument: 'after', runValidators: true };
+      if (session) options.session = session;
+
+      const updateQuery = {
+        $set: { bookingStatus: BOOKING_STATUS.PROVIDER_TIMEOUT }
+      };
+      if (booking.providerId) {
+        updateQuery.$addToSet = { timedOutProviderIds: booking.providerId };
+      }
+
+      const updatedBooking = await this.bookingRepo.model.findOneAndUpdate(
+        { _id: bookingId },
+        updateQuery,
+        options
       );
 
       await this.timelineService.logTransition({
         booking,
         fromStatus: BOOKING_STATUS.PENDING_PROVIDER_RESPONSE,
-        toStatus: BOOKING_STATUS.SEARCHING_PROVIDER,
+        toStatus: BOOKING_STATUS.PROVIDER_TIMEOUT,
         actor: { userId: booking.customerId, role: 'SYSTEM' },
-        metadata: { reason: 'PROVIDER_TIMEOUT_REQUEUE' },
+        metadata: { reason: 'PROVIDER_TIMEOUT', timedOutProviderId: booking.providerId, providerName },
         session
       });
 
       await this.eventService.dispatchEvent(
         bookingId,
-        BOOKING_EVENTS.ROUTED_FALLBACK,
-        { nextProviderId: null, requiresRematch: true },
+        BOOKING_EVENTS.ALLOCATION_FAILED,
+        {
+          customerId: booking.customerId,
+          providerName,
+          timedOutProviderId: booking.providerId,
+          message: `${providerName} didn't respond in time. Choose another provider to continue.`
+        },
         session
       );
 
-      return updatedBooking;
-    } else {
-      const updatedBooking = await this.bookingRepo.updateStatus(
-        bookingId,
-        BOOKING_STATUS.PENDING_PROVIDER_RESPONSE,
-        BOOKING_STATUS.FAILED,
-        session
-      );
-
-      await this.timelineService.logTransition({
-        booking,
-        fromStatus: BOOKING_STATUS.PENDING_PROVIDER_RESPONSE,
-        toStatus: BOOKING_STATUS.FAILED,
-        actor: { userId: booking.customerId, role: 'SYSTEM' },
-        metadata: { reason: 'CANDIDATE_POOL_EXHAUSTED' },
-        session
-      });
-
-      await this.eventService.dispatchEvent(bookingId, BOOKING_EVENTS.ALLOCATION_FAILED, {}, session);
       return updatedBooking;
     }
   }
