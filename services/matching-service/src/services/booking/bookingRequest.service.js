@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const MATCHING_BOOKING_STATUS = require("../../constants/bookingStatus");
 const ApiError = require("../../utils/ApiError");
+const logger = require("../../config/logger");
 
 class BookingRequestService {
   constructor(bookingRequestRepository, bookingServiceClient, searchService) {
@@ -56,6 +57,18 @@ class BookingRequestService {
         providerSnapshot,
       });
 
+      try {
+        const publisher = require("../../events/notification-event.publisher");
+        await publisher.publish("booking.offer_sent", providerId, {
+          bookingId,
+          serviceId,
+          customerId,
+          message: "New Job Request Available! Tap to accept before timeout."
+        });
+      } catch (pubErr) {
+        logger.warn("FAILED_TO_PUBLISH_BOOKING_OFFER_SENT", { error: pubErr.message });
+      }
+
       return {
         bookingId,
         providerId,
@@ -69,7 +82,27 @@ class BookingRequestService {
   }
 
   async acceptBookingRequest(providerId, bookingId, trackingMeta = {}) {
-    const staged = await this.requestRepo.getStagedReservation(bookingId);
+    let staged = await this.requestRepo.getStagedReservation(bookingId);
+    if (!staged) {
+      // Fallback: Verify directly with Booking Service if booking is active & assigned to this provider
+      try {
+        const liveBooking = await this.bookingClient.getBooking(bookingId, trackingMeta.requestId);
+        if (
+          liveBooking &&
+          (liveBooking.bookingStatus === 'PENDING_PROVIDER_RESPONSE' || liveBooking.status === 'PENDING_PROVIDER_RESPONSE') &&
+          String(liveBooking.providerId) === String(providerId)
+        ) {
+          staged = {
+            bookingId,
+            providerId,
+            lockToken: null,
+          };
+        }
+      } catch (checkErr) {
+        logger.warn('Direct booking verification lookup failed:', { error: checkErr.message });
+      }
+    }
+
     if (!staged) {
       throw new ApiError("Booking request is no longer active.", 409);
     }
@@ -86,7 +119,7 @@ class BookingRequestService {
 
     await Promise.all([
       this.requestRepo.clearStagedReservation(bookingId),
-      this.requestRepo.releaseProviderLock(providerId, staged.lockToken),
+      staged.lockToken ? this.requestRepo.releaseProviderLock(providerId, staged.lockToken) : Promise.resolve(),
     ]);
 
     return {
